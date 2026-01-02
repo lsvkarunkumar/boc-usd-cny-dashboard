@@ -4,6 +4,7 @@ const els = {
   yearSelect: document.getElementById("yearSelect"),
   monthSelect: document.getElementById("monthSelect"),
   rateColumn: document.getElementById("rateColumn"),
+  impactMode: document.getElementById("impactMode"),
 
   rawTbody: document.querySelector("#rawTable tbody"),
   avgTbody: document.querySelector("#avgTable tbody"),
@@ -99,14 +100,25 @@ async function loadMonth(){
     if(resp.ok) currentData = await resp.json();
   }catch{}
 
+  await loadYearAgg(); // needed before raw impact mode "prev_day_avg"
   renderRaw();
-  await loadYearAgg();
+  renderImpact();
 }
 
 function usdFromCnyExposure(exposureCny, rateRmbPer100Usd){
-  // Convert "RMB per 100 USD" => RMB per 1 USD
-  const r = rateRmbPer100Usd / 100;
+  const r = rateRmbPer100Usd / 100; // RMB per 1 USD
   return exposureCny / r;
+}
+
+function buildPrevDayAvgMap(){
+  // Map date => previous day's avgMiddle (if available)
+  const map = new Map();
+  for(let i=0;i<yearDaily.length;i++){
+    const today = yearDaily[i];
+    const prev = yearDaily[i-1];
+    map.set(today.date, prev ? prev.avgMiddle : null);
+  }
+  return map;
 }
 
 function renderRaw(){
@@ -117,20 +129,35 @@ function renderRaw(){
   }
 
   const exposureCny = Number(els.cnyExposure.value || 1500000000);
+  const mode = els.impactMode.value;
 
   const rows = [...currentData].sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
+
+  // For prev_day_avg mode we need previous day average of middle rate
+  const prevDayAvgMap = buildPrevDayAvgMap();
+
   for(let i=0;i<rows.length;i++){
     const r = rows[i];
     const mid = toNum(r.middle);
-    const prev = rows[i-1];
-    const prevMid = prev ? toNum(prev.middle) : null;
-
-    // USD Impact vs previous publish event (middle rate)
     let usdImpact = null;
-    if (Number.isFinite(mid) && Number.isFinite(prevMid)) {
-      const usdNow = usdFromCnyExposure(exposureCny, mid);
-      const usdPrev = usdFromCnyExposure(exposureCny, prevMid);
-      usdImpact = usdNow - usdPrev;
+
+    if (Number.isFinite(mid)) {
+      if (mode === "prev_publish") {
+        const prev = rows[i-1];
+        const prevMid = prev ? toNum(prev.middle) : null;
+        if (Number.isFinite(prevMid)) {
+          const usdNow = usdFromCnyExposure(exposureCny, mid);
+          const usdPrev = usdFromCnyExposure(exposureCny, prevMid);
+          usdImpact = usdNow - usdPrev;
+        }
+      } else if (mode === "prev_day_avg") {
+        const prevAvgMiddle = prevDayAvgMap.get(r.date);
+        if (Number.isFinite(prevAvgMiddle)) {
+          const usdNow = usdFromCnyExposure(exposureCny, mid);
+          const usdPrevDay = usdFromCnyExposure(exposureCny, prevAvgMiddle);
+          usdImpact = usdNow - usdPrevDay;
+        }
+      }
     }
 
     const tr = document.createElement("tr");
@@ -152,6 +179,7 @@ async function loadYearAgg(){
   const y = els.yearSelect.value;
   yearDaily = [];
 
+  // load all months raw for the year
   const allRows = [];
   for(const m of monthNames){
     const url = `data/${y}/${y}-${m}.json`;
@@ -163,6 +191,7 @@ async function loadYearAgg(){
     }catch{}
   }
 
+  // group by date
   const byDate = new Map();
   for(const r of allRows){
     if(!r?.date) continue;
@@ -175,23 +204,34 @@ async function loadYearAgg(){
 
   for(const d of dates){
     const rows = byDate.get(d).sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
-    const vals = rows.map(x => toNum(x[col])).filter(v=>v !== null);
-    if(vals.length === 0) continue;
 
-    const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
+    const selectedVals = rows.map(x => toNum(x[col])).filter(v=>v !== null);
+    const middleVals   = rows.map(x => toNum(x["middle"])).filter(v=>v !== null);
+
+    if(selectedVals.length === 0) continue;
+
+    const avg = selectedVals.reduce((s,v)=>s+v,0)/selectedVals.length;
+    const min = Math.min(...selectedVals);
+    const max = Math.max(...selectedVals);
+
+    const avgMiddle = (middleVals.length ? (middleVals.reduce((s,v)=>s+v,0)/middleVals.length) : null);
 
     const firstRow = rows[0];
     const first = toNum(firstRow[col]);
     const firstTime = String(firstRow.publishTime || "");
 
-    yearDaily.push({ date:d, avg, min, max, publishes: vals.length, first, firstTime, _firstRow:firstRow });
+    yearDaily.push({
+      date:d,
+      avg, min, max,
+      publishes: selectedVals.length,
+      first, firstTime,
+      avgMiddle,
+      _firstRow:firstRow
+    });
   }
 
   renderAvg();
   renderFirst();
-  renderImpact();
 }
 
 function renderAvg(){
@@ -268,7 +308,7 @@ function renderFirst(){
   }
 }
 
-// ===== Raw downloads =====
+// Downloads
 function toCsv(rows){
   const header = ["date","publishTime","buying","cashBuying","selling","cashSelling","middle"];
   const lines = [header.join(",")];
@@ -303,13 +343,10 @@ els.btnJson.addEventListener("click", ()=> {
   const m = els.monthSelect.value;
   downloadText(`boc_usd_cny_${y}-${m}.json`, JSON.stringify(currentData, null, 2), "application/json");
 });
-
-// Excel download – use the XLSX generated by the workflow (best)
 els.btnXls.addEventListener("click", ()=>{
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  const url = `data/${y}/${y}-${m}.xlsx`;
-  window.open(url, "_blank");
+  window.open(`data/${y}/${y}-${m}.xlsx`, "_blank");
 });
 
 // Email
@@ -319,28 +356,29 @@ els.btnEmail.addEventListener("click", ()=> {
   const m = els.monthSelect.value;
   const link = location.href;
   const subj = encodeURIComponent(`BOC USD/CNY Dashboard – ${y}-${m}`);
-  const body = encodeURIComponent(`Dashboard: ${link}\n\nMonth: ${y}-${m}\n\nUse Export Excel button to download the official capture.`);
-
+  const body = encodeURIComponent(`Dashboard: ${link}\n\nMonth: ${y}-${m}\n\nUse Export Excel to download captured data.`);
   window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subj}&body=${body}`;
 });
 
-// Run Now (manual)
+// Run Now
 els.btnRunNow.addEventListener("click", ()=>{
   alert("Run Now:\nRepo → Actions → Fetch BOC USD Snapshot → Run workflow");
 });
 
-// Bottom impact box (no decimals)
+// Bottom impact box (integer, signed)
 function renderImpact(){
   if(yearDaily.length < 2){
     els.impactBox.innerHTML = `<div style="color:var(--muted)">Need at least 2 days of data to compute day-to-day impact.</div>`;
     return;
   }
+
   const exposureCny = Number(els.cnyExposure.value || 1500000000);
   const last = yearDaily[yearDaily.length-1];
   const prev = yearDaily[yearDaily.length-2];
 
-  const rToday = Number(last.avg) / 100;
-  const rPrev  = Number(prev.avg) / 100;
+  // Use Middle avg for macro impact
+  const rToday = Number(last.avgMiddle ?? last.avg) / 100;
+  const rPrev  = Number(prev.avgMiddle ?? prev.avg) / 100;
 
   const usdToday = exposureCny / rToday;
   const usdPrev  = exposureCny / rPrev;
@@ -355,16 +393,17 @@ function renderImpact(){
   `;
 }
 
-els.btnRecalcImpact.addEventListener("click", ()=>{
-  renderRaw();      // refresh impact column too
-  renderImpact();
-});
-
 // Wiring
 els.yearSelect.addEventListener("change", loadMonth);
 els.monthSelect.addEventListener("change", loadMonth);
-els.rateColumn.addEventListener("change", loadYearAgg);
+els.rateColumn.addEventListener("change", loadMonth);
+els.impactMode.addEventListener("change", ()=>{ renderRaw(); });
 els.btnRefresh.addEventListener("click", loadMonth);
+
+els.btnRecalcImpact.addEventListener("click", ()=>{
+  renderRaw();
+  renderImpact();
+});
 
 // Boot
 (function boot(){
