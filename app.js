@@ -44,6 +44,9 @@ let firstChart = null;
 let intradayChart = null;
 let pnlChart = null;
 
+const SHOW_LAST_INTRADAY_ROWS = 12;
+const SHOW_LAST_RAW_ROWS = 12;
+
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
@@ -67,6 +70,19 @@ function fmtM0(v){
 }
 function chartsAvailable(){
   return typeof Chart !== "undefined";
+}
+
+// --- GitHub Pages base path helper (project pages safe) ---
+function basePath(){
+  const p = location.pathname;
+  const parts = p.split("/").filter(Boolean);
+  if (location.hostname.endsWith("github.io") && parts.length >= 1) {
+    return "/" + parts[0];
+  }
+  return "";
+}
+function withBase(url){
+  return basePath() + "/" + url.replace(/^\/+/, "");
 }
 
 function todayISO(){
@@ -153,11 +169,7 @@ function downloadText(filename, text, mime){
   URL.revokeObjectURL(url);
 }
 
-// ===== FX MODEL (YOUR FINAL REQUIREMENT) =====
-// You input USD Exposure (e.g., 1.5B) at Base rate (714.60 per 100 USD).
-// That defines FIXED CNY obligation: BaseCNY = USDexp * (BaseRate/100).
-// USD required at any current rate R: USDnow = BaseCNY / (R/100).
-// USD Impact = USDnow - USDexp.
+// ===== FX MODEL =====
 function calcBaseCny(usdExp, baseRate){
   return usdExp * (baseRate/100);
 }
@@ -165,6 +177,7 @@ function usdRequired(baseCny, rate){
   return baseCny / (rate/100);
 }
 
+// ===== Baseline lock per month =====
 function monthKey(){
   return `${els.yearSelect.value}-${els.monthSelect.value}`;
 }
@@ -187,13 +200,13 @@ function lockBaselineForMonth(){
   }
 }
 
-// ===== Data load =====
+// ===== Load Month =====
 async function loadMonth(){
   loadBaselineForMonth();
 
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  currentData = (await fetchJson(`data/${y}/${y}-${m}.json`)) || [];
+  currentData = (await fetchJson(withBase(`data/${y}/${y}-${m}.json`))) || [];
 
   await loadYearAgg();
   renderDayOptions();
@@ -221,7 +234,7 @@ function renderDayOptions(){
   els.daySelect.value = dates[dates.length-1];
 }
 
-// ===== Tab1 Raw table with USD Impact (M) vs baseline =====
+// ===== Tab 1 — show last 12 rows but keep all data fetched =====
 function renderRaw(){
   els.rawTbody.innerHTML = "";
   if(currentData.length === 0){
@@ -239,7 +252,10 @@ function renderRaw(){
   const baseCny = calcBaseCny(usdExp, baseRate);
 
   const rows = [...currentData].sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
-  for(const r of rows){
+  const start = Math.max(0, rows.length - SHOW_LAST_RAW_ROWS);
+
+  for(let i=start;i<rows.length;i++){
+    const r = rows[i];
     const mid = toNum(r.middle);
     let impact = null;
     if(Number.isFinite(mid)){
@@ -261,13 +277,13 @@ function renderRaw(){
   }
 }
 
-// ===== Year aggregations (for daily charts/tables) =====
+// ===== Year aggregations =====
 async function loadYearAgg(){
   const y = els.yearSelect.value;
   yearDaily = [];
   const allRows = [];
   for(const m of monthNames){
-    const arr = await fetchJson(`data/${y}/${y}-${m}.json`);
+    const arr = await fetchJson(withBase(`data/${y}/${y}-${m}.json`));
     if(Array.isArray(arr)) allRows.push(...arr);
   }
 
@@ -331,12 +347,10 @@ function renderAvg(){
 
   if(chartsAvailable()){
     const ctx = document.getElementById("avgChart");
-    const labels = yearDaily.map(x=>x.date);
-    const series = yearDaily.map(x=>x.avg);
     if(avgChart) avgChart.destroy();
     avgChart = new Chart(ctx, {
       type:"line",
-      data:{ labels, datasets:[{ label:"Daily Avg (Selected)", data:series }]},
+      data:{ labels: yearDaily.map(x=>x.date), datasets:[{ label:"Daily Avg (Selected)", data: yearDaily.map(x=>x.avg) }]},
       options:{ responsive:true, maintainAspectRatio:false }
     });
   }
@@ -367,18 +381,16 @@ function renderFirst(){
 
   if(chartsAvailable()){
     const ctx = document.getElementById("firstChart");
-    const labels = yearDaily.map(x=>x.date);
-    const series = yearDaily.map(x=> (x.first ?? null));
     if(firstChart) firstChart.destroy();
     firstChart = new Chart(ctx, {
       type:"line",
-      data:{ labels, datasets:[{ label:"Daily First Publish (Selected)", data:series }]},
+      data:{ labels: yearDaily.map(x=>x.date), datasets:[{ label:"Daily First Publish (Selected)", data: yearDaily.map(x=> (x.first ?? null)) }]},
       options:{ responsive:true, maintainAspectRatio:false }
     });
   }
 }
 
-// ===== Impact summary box (M) =====
+// ===== Impact Summary =====
 function renderImpact(){
   const usdExp = Number(els.usdExposure.value || 1500000000);
   const baseRate = Number(els.baselineRate.value || 714.6);
@@ -396,14 +408,13 @@ function renderImpact(){
   const usdNow = usdRequired(baseCny, currentRate);
   const usdImpact = usdNow - usdExp;
 
-  // Sensitivity at CURRENT rate for +0.01 move
   const usdPlus001 = usdRequired(baseCny, currentRate + 0.01);
   const sens = usdPlus001 - usdNow;
 
   const impactColor = usdImpact >= 0 ? "#ff4d4f" : "#00c48c";
 
   els.impactBox.innerHTML = `
-    <div><b>Baseline Rate:</b> ${esc(baseRate)}  |  <b>Latest Rate (Middle):</b> ${esc(currentRate)}  |  <b>Latest Publish:</b> ${esc(last.publishTime)}</div>
+    <div><b>Baseline Rate:</b> ${esc(baseRate)} | <b>Latest Rate (Middle):</b> ${esc(currentRate)} | <b>Latest Publish:</b> ${esc(last.publishTime)}</div>
     <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
     <div><b>Base USD Required:</b> ${fmtM0(usdExp)} M</div>
     <div><b>USD Required Now:</b> ${fmtM0(usdNow)} M</div>
@@ -412,11 +423,10 @@ function renderImpact(){
     </div>
     <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
     <div><b>Sensitivity:</b> Every 0.01 move ≈ ${Math.abs(Number(fmtM0(sens))).toLocaleString()} M USD</div>
-    <div class="hint">Alert threshold (from input): ${esc(els.alertThresholdM.value)} M</div>
   `;
 }
 
-// ===== FX P&L Chart (Daily USD Impact vs Baseline, in M) =====
+// ===== P&L Chart =====
 function drawPnL(){
   const usdExp = Number(els.usdExposure.value || 1500000000);
   const baseRate = Number(els.baselineRate.value || 714.6);
@@ -426,7 +436,6 @@ function drawPnL(){
   }
   const baseCny = calcBaseCny(usdExp, baseRate);
 
-  // Use daily avgMiddle for each day
   const pts = yearDaily
     .filter(d => Number.isFinite(d.avgMiddle))
     .map(d => ({
@@ -442,20 +451,55 @@ function drawPnL(){
     type: "line",
     data: {
       labels: pts.map(p=>p.date),
-      datasets: [
-        { label: "USD Impact (M) vs Baseline", data: pts.map(p=>p.impactM) }
-      ]
+      datasets: [{ label: "USD Impact (M) vs Baseline", data: pts.map(p=>p.impactM) }]
     },
-    options: { responsive:true, maintainAspectRatio:false }
+    options: {
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(2)} M`
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v) => Number(v).toFixed(2) + " M"
+          }
+        }
+      }
+    }
   });
 }
 
-// ===== Intraday chart + LAST 5 rows table =====
+// ===== Intraday chart (better y-axis) + last 12 rows =====
 function timeOnly(publishTime){
   const s = String(publishTime || "");
   const parts = s.split(" ");
   return parts.length >= 2 ? parts[1] : s;
 }
+
+function calcNiceBounds(values){
+  const v = values.filter(x => Number.isFinite(x));
+  if(v.length === 0) return null;
+  let min = Math.min(...v);
+  let max = Math.max(...v);
+  if(min === max){
+    // if flat line, create small window around value
+    const pad = Math.max(0.05, Math.abs(min) * 0.001);
+    min = min - pad;
+    max = max + pad;
+  } else {
+    const range = max - min;
+    const pad = range * 0.15;
+    min -= pad;
+    max += pad;
+  }
+  return {min, max};
+}
+
 function drawIntraday(){
   const day = els.daySelect.value;
   els.intradayTbody.innerHTML = "";
@@ -481,8 +525,8 @@ function drawIntraday(){
     return null;
   });
 
-  // Render ONLY last 5 rows
-  const start = Math.max(0, rows.length - 5);
+  // table: last 12
+  const start = Math.max(0, rows.length - SHOW_LAST_INTRADAY_ROWS);
   for(let i=start;i<rows.length;i++){
     const v = values[i];
     const ra = runAvg[i];
@@ -500,6 +544,7 @@ function drawIntraday(){
   }
 
   if(chartsAvailable()){
+    const bounds = calcNiceBounds(values);
     const ctx = document.getElementById("intradayChart");
     if(intradayChart) intradayChart.destroy();
 
@@ -512,16 +557,34 @@ function drawIntraday(){
           { label: "Running Avg", data: runAvg }
         ]
       },
-      options: { responsive:true, maintainAspectRatio:false }
+      options: {
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(2)}`
+            }
+          }
+        },
+        scales: {
+          y: {
+            ...(bounds ? {min: bounds.min, max: bounds.max} : {}),
+            ticks: {
+              callback: (v) => Number(v).toFixed(2)
+            }
+          }
+        }
+      }
     });
   }
 }
 
-// ===== Live status from capture log =====
+// ===== Live status =====
 async function loadLiveStatus(){
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  const url = `data/${y}/${y}-${m}-capturelog.csv`;
+  const url = withBase(`data/${y}/${y}-${m}-capturelog.csv`);
 
   els.liveBox.innerHTML = `<div style="color:var(--muted)">Loading capture log…</div>`;
   const text = await fetchText(url);
@@ -583,12 +646,12 @@ els.btnJson.addEventListener("click", ()=> {
 els.btnXls.addEventListener("click", ()=>{
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  window.open(`data/${y}/${y}-${m}.xlsx`, "_blank");
+  window.open(withBase(`data/${y}/${y}-${m}.xlsx`), "_blank");
 });
 els.btnCaptureLog.addEventListener("click", ()=>{
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  window.open(`data/${y}/${y}-${m}-capturelog.csv`, "_blank");
+  window.open(withBase(`data/${y}/${y}-${m}-capturelog.csv`), "_blank");
 });
 
 // Email
@@ -611,13 +674,12 @@ els.btnRunNow.addEventListener("click", ()=>{
   alert("Run Now:\nRepo → Actions → Fetch BOC USD Snapshot → Run workflow");
 });
 
-// ===== Baseline lock =====
+// Baseline lock button
 els.btnLockBaseline.addEventListener("click", lockBaselineForMonth);
 
-// ===== Wiring =====
+// Wiring
 els.yearSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); drawIntraday(); });
 els.monthSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); drawIntraday(); });
-
 els.rateColumn.addEventListener("change", async ()=>{ await loadMonth(); drawIntraday(); });
 
 els.usdExposure.addEventListener("input", ()=>{ renderRaw(); renderImpact(); drawPnL(); });
