@@ -40,6 +40,7 @@
 
       <div class="row" style="margin-top:10px">
         <button id="btnRegister">Register</button>
+        <button id="btnCopyRequest" class="btnGhost">Copy Request</button>
       </div>
 
       <p id="authMsg" class="small" style="margin-top:10px;color:var(--muted)"></p>
@@ -50,6 +51,11 @@
     <div class="title">
       <h1>BOC USD/CNY (As Published: RMB per 100 USD)</h1>
       <p id="subtitle">Dashboard • Mobile-ready • Lagos time</p>
+    </div>
+
+    <div class="topActions">
+      <a id="bocLatestLink" class="linkBtn" target="_blank" rel="noreferrer">Open BOC Latest</a>
+      <button id="btnRefresh">Refresh Dashboard</button>
     </div>
   </header>
 
@@ -67,7 +73,7 @@
         </label>
 
         <label>
-          Rate Column
+          Rate Column (for charts/averages)
           <select id="rateColumn">
             <option value="middle">Middle Rate</option>
             <option value="buying">Buying Rate</option>
@@ -79,8 +85,9 @@
       </div>
 
       <div class="row">
-        <button id="btnDownloadCsv">Download CSV</button>
-        <button id="btnDownloadJson">Download JSON</button>
+        <button id="btnDownloadCsv">Download CSV (Raw)</button>
+        <button id="btnDownloadJson">Download JSON (Raw)</button>
+        <button id="btnDownloadXlsx">Download Excel (2 sheets)</button>
 
         <div class="emailBox">
           <input id="emailTo" placeholder="Enter email address" inputmode="email" />
@@ -91,8 +98,8 @@
 
     <section class="grid">
       <div class="card wide">
-        <h2>Tab 1 — Monthly Raw Records (All publishes)</h2>
-        <p class="hint">Shows every BOC published row for the selected month (multiple rows per day possible). Values are “as published” (RMB per 100 USD).</p>
+        <h2>Tab 1 — Monthly Raw Records (All Published Values)</h2>
+        <p class="hint">Shows every BOC published row for the selected month (multiple rows per day possible). Values shown exactly as stored (strings) to preserve precision.</p>
         <div class="tableWrap">
           <table id="rawTable">
             <thead>
@@ -113,7 +120,7 @@
 
       <div class="card">
         <h2>Tab 2 — Daily Averages (Year)</h2>
-        <p class="hint">Daily average of the selected column, plus % change vs previous day.</p>
+        <p class="hint">Daily average of the selected column + % change vs previous day.</p>
         <div class="chartWrap"><canvas id="avgChart"></canvas></div>
         <div class="tableWrap">
           <table id="avgTable">
@@ -134,7 +141,7 @@
 
       <div class="card">
         <h2>Tab 3 — Daily First Published (Year)</h2>
-        <p class="hint">Earliest publish of each day (based on BOC publish time), plus % change vs previous day.</p>
+        <p class="hint">Earliest publish of each day (based on publish time) + % change vs previous day.</p>
         <div class="chartWrap"><canvas id="firstChart"></canvas></div>
         <div class="tableWrap">
           <table id="firstTable">
@@ -153,9 +160,7 @@
 
       <div class="card wide">
         <h2>USD Impact (based on CNY exposure)</h2>
-        <p class="hint">
-          Rates displayed are “as published” (RMB per 100 USD). USD impact is computed from a CNY exposure (e.g., vendor payments in CNY).
-        </p>
+        <p class="hint">Rates displayed are RMB per 100 USD (as published). USD impact uses internal /100 only for math.</p>
         <div class="row">
           <label>
             CNY Exposure
@@ -168,7 +173,12 @@
     </section>
   </main>
 
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- SheetJS for XLSX export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+
   <script src="app.js"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
