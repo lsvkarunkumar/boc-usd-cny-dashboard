@@ -9,11 +9,14 @@ const els = {
   firstTbody: document.querySelector("#firstTable tbody"),
   btnCsv: document.getElementById("btnDownloadCsv"),
   btnJson: document.getElementById("btnDownloadJson"),
+  btnXlsx: document.getElementById("btnDownloadXlsx"),
   emailTo: document.getElementById("emailTo"),
   btnEmail: document.getElementById("btnEmail"),
   cnyExposure: document.getElementById("cnyExposure"),
   btnRecalcImpact: document.getElementById("btnRecalcImpact"),
   impactBox: document.getElementById("impactBox"),
+  btnRefresh: document.getElementById("btnRefresh"),
+  bocLatestLink: document.getElementById("bocLatestLink"),
 };
 
 // ===== AUTH (Manual approval via data/users.json) =====
@@ -25,11 +28,18 @@ const AUTH = {
   regName: document.getElementById("regName"),
   regEmail: document.getElementById("regEmail"),
   btnRegister: document.getElementById("btnRegister"),
+  btnCopyRequest: document.getElementById("btnCopyRequest"),
   msg: document.getElementById("authMsg"),
   config: null
 };
 
 function normEmail(s){ return (s || "").trim().toLowerCase(); }
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, (m)=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+function showMsg(t){ AUTH.msg.textContent = t || ""; }
 
 async function loadAuthConfig(){
   const resp = await fetch("data/users.json", {cache:"no-store"});
@@ -37,24 +47,17 @@ async function loadAuthConfig(){
   AUTH.config = await resp.json();
   return AUTH.config;
 }
-
 function isAllowed(email){
   const e = normEmail(email);
   const allowed = (AUTH.config?.allowed || []).map(normEmail);
   return allowed.includes(e);
 }
-
 function setAuthState(isAuthed){
   AUTH.overlay.style.display = isAuthed ? "none" : "flex";
   AUTH.btnLogout.style.display = isAuthed ? "inline-block" : "none";
 }
-
-function saveSession(email){
-  localStorage.setItem("bocfx_authed_email", normEmail(email));
-}
-function clearSession(){
-  localStorage.removeItem("bocfx_authed_email");
-}
+function saveSession(email){ localStorage.setItem("bocfx_authed_email", normEmail(email)); }
+function clearSession(){ localStorage.removeItem("bocfx_authed_email"); }
 
 async function tryAutoLogin(){
   const saved = normEmail(localStorage.getItem("bocfx_authed_email"));
@@ -65,8 +68,6 @@ async function tryAutoLogin(){
   setAuthState(false);
   return false;
 }
-
-function showMsg(t){ AUTH.msg.textContent = t || ""; }
 
 AUTH.btnLogin.addEventListener("click", async ()=>{
   const email = normEmail(AUTH.loginEmail.value);
@@ -89,6 +90,19 @@ AUTH.btnLogout.addEventListener("click", ()=>{
   showMsg("Logged out.");
 });
 
+function buildAccessRequestText(name, email){
+  const link = location.href;
+  return `Hello Admin,
+
+Please approve access for:
+Name: ${name}
+Email: ${email}
+
+Dashboard: ${link}
+
+Thanks.`;
+}
+
 AUTH.btnRegister.addEventListener("click", ()=>{
   const name = (AUTH.regName.value || "").trim();
   const email = normEmail(AUTH.regEmail.value);
@@ -104,32 +118,35 @@ AUTH.btnRegister.addEventListener("click", ()=>{
   }
 
   const subj = encodeURIComponent("BOC FX Dashboard – Access Request");
-  const body = encodeURIComponent(
-`Hello Admin,
-
-Please approve access for:
-Name: ${name}
-Email: ${email}
-
-Dashboard: ${location.href}
-
-Thanks.`
-  );
+  const body = encodeURIComponent(buildAccessRequestText(name, email));
   window.location.href = `mailto:${encodeURIComponent(admin)}?subject=${subj}&body=${body}`;
-  showMsg("Access request email opened. Please send it.");
+  showMsg("Access request email opened. If mail app is blocked, use Copy Request.");
 });
 
-// ===== DASHBOARD =====
+AUTH.btnCopyRequest.addEventListener("click", async ()=>{
+  const name = (AUTH.regName.value || "").trim();
+  const email = normEmail(AUTH.regEmail.value);
+  if(!name || !email){
+    showMsg("Enter name and email first.");
+    return;
+  }
+  const txt = buildAccessRequestText(name, email);
+  try{
+    await navigator.clipboard.writeText(txt);
+    showMsg("Copied request text. Paste it into email/WhatsApp to admin.");
+  }catch(e){
+    showMsg("Clipboard blocked. Copy manually:\n" + txt);
+  }
+});
+
+// ===== DASHBOARD DATA =====
 let avgChart, firstChart;
-let currentData = []; // month rows
+let currentData = []; // month rows (raw)
 let yearDaily = [];   // aggregated year rows
 
 function todayISO(){
   const d = new Date();
-  return {
-    yyyy: d.getFullYear(),
-    mm: String(d.getMonth()+1).padStart(2,"0")
-  };
+  return { yyyy: d.getFullYear(), mm: String(d.getMonth()+1).padStart(2,"0") };
 }
 
 function setOptions(){
@@ -152,6 +169,13 @@ function setOptions(){
     els.monthSelect.appendChild(o);
   });
   els.monthSelect.value = now.mm;
+}
+
+// Values are stored as strings for exact display.
+// Convert to number only for analytics:
+function toNum(x){
+  const n = Number(String(x).trim());
+  return Number.isFinite(n) ? n : null;
 }
 
 async function loadMonth(){
@@ -177,17 +201,18 @@ function renderRaw(){
     els.rawTbody.innerHTML = `<tr><td colspan="7">No data yet for this month.</td></tr>`;
     return;
   }
+
   const rows = [...currentData].sort((a,b)=> (a.date + " " + a.publishTime).localeCompare(b.date + " " + b.publishTime));
   for(const r of rows){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${esc(r.date)}</td>
       <td>${esc(r.publishTime)}</td>
-      <td>${fmt(r.buying)}</td>
-      <td>${fmt(r.cashBuying)}</td>
-      <td>${fmt(r.selling)}</td>
-      <td>${fmt(r.cashSelling)}</td>
-      <td>${fmt(r.middle)}</td>
+      <td>${esc(r.buying)}</td>
+      <td>${esc(r.cashBuying)}</td>
+      <td>${esc(r.selling)}</td>
+      <td>${esc(r.cashSelling)}</td>
+      <td>${esc(r.middle)}</td>
     `;
     els.rawTbody.appendChild(tr);
   }
@@ -220,18 +245,25 @@ async function loadYearAgg(){
 
   for(const d of dates){
     const rows = byDate.get(d).sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
-    const vals = rows.map(x => Number(x[col])).filter(v=>Number.isFinite(v));
+
+    const vals = rows.map(x => toNum(x[col])).filter(v=>v !== null);
     if(vals.length === 0) continue;
 
     const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
     const min = Math.min(...vals);
     const max = Math.max(...vals);
 
+    // First published row:
     const firstRow = rows[0];
-    const first = Number(firstRow[col]);
+    const first = toNum(firstRow[col]);
     const firstTime = String(firstRow.publishTime || "");
 
-    yearDaily.push({ date:d, avg, min, max, publishes: vals.length, first, firstTime });
+    yearDaily.push({
+      date:d, avg, min, max, publishes: vals.length,
+      first: first ?? null, firstTime,
+      // keep raw strings for exact export if needed:
+      _firstRow: firstRow
+    });
   }
 
   renderAvg();
@@ -242,6 +274,10 @@ async function loadYearAgg(){
 function pctChange(curr, prev){
   if(!Number.isFinite(prev) || prev === 0) return null;
   return ((curr - prev) / prev) * 100;
+}
+function fmt(n, dp=2){
+  if(!Number.isFinite(n)) return "-";
+  return Number(n).toFixed(dp);
 }
 
 function renderAvg(){
@@ -260,10 +296,10 @@ function renderAvg(){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${esc(r.date)}</td>
-      <td>${fmt(r.avg)}</td>
+      <td>${fmt(r.avg,2)}</td>
       <td>${pc===null ? "-" : fmt(pc,2) + "%"}</td>
-      <td>${fmt(r.min)}</td>
-      <td>${fmt(r.max)}</td>
+      <td>${fmt(r.min,2)}</td>
+      <td>${fmt(r.max,2)}</td>
       <td>${r.publishes}</td>
     `;
     els.avgTbody.appendChild(tr);
@@ -281,13 +317,13 @@ function renderFirst(){
   for(let i=0;i<yearDaily.length;i++){
     const r = yearDaily[i];
     const prev = yearDaily[i-1];
-    const pc = prev ? pctChange(r.first, prev.first) : null;
+    const pc = (prev && Number.isFinite(r.first) && Number.isFinite(prev.first)) ? pctChange(r.first, prev.first) : null;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${esc(r.date)}</td>
       <td>${esc(r.firstTime)}</td>
-      <td>${fmt(r.first)}</td>
+      <td>${r.first===null ? "-" : fmt(r.first,2)}</td>
       <td>${pc===null ? "-" : fmt(pc,2) + "%"}</td>
     `;
     els.firstTbody.appendChild(tr);
@@ -311,7 +347,7 @@ function drawAvgChart(){
 function drawFirstChart(){
   const ctx = document.getElementById("firstChart");
   const labels = yearDaily.map(x=>x.date);
-  const series = yearDaily.map(x=>x.first);
+  const series = yearDaily.map(x=> (x.first ?? null));
 
   if(firstChart) firstChart.destroy();
   firstChart = new Chart(ctx, {
@@ -326,18 +362,7 @@ function destroyCharts(){
   if(firstChart) firstChart.destroy();
 }
 
-function fmt(n, dp=2){
-  if(!Number.isFinite(n)) return "-";
-  return Number(n).toFixed(dp);
-}
-
-function esc(s){
-  return String(s ?? "").replace(/[&<>"']/g, (m)=>({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-  }[m]));
-}
-
-// ===== Downloads =====
+// ===== Downloads: CSV/JSON (raw) =====
 function toCsv(rows){
   const header = ["date","publishTime","buying","cashBuying","selling","cashSelling","middle"];
   const lines = [header.join(",")];
@@ -350,7 +375,6 @@ function toCsv(rows){
   }
   return lines.join("\n");
 }
-
 function downloadText(filename, text, mime){
   const blob = new Blob([text], {type:mime});
   const url = URL.createObjectURL(blob);
@@ -366,15 +390,75 @@ function downloadText(filename, text, mime){
 els.btnCsv.addEventListener("click", ()=> {
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  downloadText(`boc_usd_cny_${y}-${m}.csv`, toCsv(currentData), "text/csv;charset=utf-8");
+  downloadText(`boc_usd_cny_raw_${y}-${m}.csv`, toCsv(currentData), "text/csv;charset=utf-8");
 });
 els.btnJson.addEventListener("click", ()=> {
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  downloadText(`boc_usd_cny_${y}-${m}.json`, JSON.stringify(currentData, null, 2), "application/json");
+  downloadText(`boc_usd_cny_raw_${y}-${m}.json`, JSON.stringify(currentData, null, 2), "application/json");
 });
 
-// ===== Email (free): opens mail app prefilled =====
+// ===== Download Excel (2 sheets) =====
+// Sheet 1: Raw Published Values
+// Sheet 2: Two tables side-by-side:
+//    Day averages table | Day first published values table
+els.btnXlsx.addEventListener("click", async ()=>{
+  const y = els.yearSelect.value;
+  const m = els.monthSelect.value;
+  const col = els.rateColumn.value;
+
+  // --- Sheet 1: Raw
+  const rawAoA = [
+    ["date","publishTime","buying","cashBuying","selling","cashSelling","middle"],
+    ...currentData.map(r=>[
+      r.date, r.publishTime, r.buying, r.cashBuying, r.selling, r.cashSelling, r.middle
+    ])
+  ];
+  const wsRaw = XLSX.utils.aoa_to_sheet(rawAoA);
+
+  // --- Sheet 2: Summary with two tables side-by-side
+  // Left: Day averages
+  const avgRows = [];
+  avgRows.push(["Day Averages"]);
+  avgRows.push(["date","avgValue(selected)","%Change vs prev","min","max","publishes"]);
+  for(let i=0;i<yearDaily.length;i++){
+    const r = yearDaily[i];
+    const prev = yearDaily[i-1];
+    const pc = prev ? pctChange(r.avg, prev.avg) : null;
+    avgRows.push([r.date, fmt(r.avg,2), pc===null ? "" : fmt(pc,2)+"%", fmt(r.min,2), fmt(r.max,2), r.publishes]);
+  }
+
+  // Right: Day first published values (exact row values pulled from first publish row where possible)
+  const firstRows = [];
+  firstRows.push(["Day First Published Values"]);
+  firstRows.push(["date","publishTime","buying","cashBuying","selling","cashSelling","middle"]);
+  for(const r of yearDaily){
+    const fr = r._firstRow || {};
+    firstRows.push([
+      r.date,
+      r.firstTime,
+      fr.buying ?? "",
+      fr.cashBuying ?? "",
+      fr.selling ?? "",
+      fr.cashSelling ?? "",
+      fr.middle ?? ""
+    ]);
+  }
+
+  // Place the two tables side-by-side in one sheet (gap columns)
+  const wsSum = XLSX.utils.aoa_to_sheet([]);
+  XLSX.utils.sheet_add_aoa(wsSum, avgRows, {origin: "A1"});
+  XLSX.utils.sheet_add_aoa(wsSum, firstRows, {origin: "I1"}); // starts at column I
+
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsRaw, "All Published Values");
+  XLSX.utils.book_append_sheet(wb, wsSum, "Averages & First");
+
+  XLSX.writeFile(wb, `boc_usd_cny_${y}-${m}_${col}.xlsx`);
+});
+
+// ===== Email button =====
 els.btnEmail.addEventListener("click", ()=> {
   const to = normEmail(els.emailTo.value);
   const y = els.yearSelect.value;
@@ -388,9 +472,9 @@ els.btnEmail.addEventListener("click", ()=> {
 Month: ${y}-${m}
 
 Downloads:
-- Use "Download CSV" or "Download JSON" buttons in the dashboard
+- Use "Download Excel (2 sheets)" for Raw + (Day Averages & Day First Published)
 
-Note: Values are “as published” (RMB per 100 USD).`
+Note: Values displayed are stored as published (RMB per 100 USD).`
   );
   window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subj}&body=${body}`;
 });
@@ -406,22 +490,18 @@ function renderImpact(){
   const last = yearDaily[yearDaily.length-1];
   const prev = yearDaily[yearDaily.length-2];
 
-  // Use selected column average as the "rate as published" (RMB per 100 USD)
+  // Use selected column average as "rate as published" (RMB per 100 USD)
   const rTodayPer100 = Number(last.avg);
   const rPrevPer100  = Number(prev.avg);
 
-  // Convert internally to RMB per 1 USD for USD math only
-  const rToday = rTodayPer100 / 100;
+  const rToday = rTodayPer100 / 100; // RMB per 1 USD (internal math)
   const rPrev  = rPrevPer100  / 100;
 
-  // USD required to buy exposureCny:
   const usdToday = exposureCny / rToday;
   const usdPrev  = exposureCny / rPrev;
-
-  // + means need more USD today vs yesterday
   const usdImpact = usdToday - usdPrev;
 
-  // Sensitivity: +0.01 CNY/USD == +1 RMB per 100 USD
+  // Sensitivity: +1 RMB per 100 USD (≈ +0.01 CNY/USD)
   const rSens = (rTodayPer100 + 1) / 100;
   const usdSens = (exposureCny / rSens) - usdToday;
 
@@ -432,19 +512,27 @@ function renderImpact(){
     <div><b>USD Required (Prev):</b> ${usdPrev.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
     <div><b>Day-to-day USD Impact:</b> ${usdImpact.toLocaleString(undefined,{maximumFractionDigits:2})}</div>
     <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
-    <div><b>Sensitivity (USD impact):</b> +1 RMB per 100 USD (≈ +0.01 CNY/USD) changes USD by
+    <div><b>Sensitivity (USD impact):</b> +1 RMB per 100 USD changes USD by
       <b>${usdSens.toLocaleString(undefined,{maximumFractionDigits:2})}</b>
     </div>
     <div class="small">Display stays “as published”. Internal /100 conversion is only for USD math.</div>
   `;
 }
-
 els.btnRecalcImpact.addEventListener("click", renderImpact);
 
 // ===== Wiring =====
 els.yearSelect.addEventListener("change", loadMonth);
 els.monthSelect.addEventListener("change", loadMonth);
 els.rateColumn.addEventListener("change", loadYearAgg);
+
+// Refresh dashboard (re-fetch JSON)
+els.btnRefresh.addEventListener("click", async ()=>{
+  await loadMonth();
+});
+
+// “Latest value” button: open official BOC page (reliable, 100% accurate)
+els.bocLatestLink.href = "https://www.boc.cn/sourcedb/whpj/enindex.html";
+els.bocLatestLink.textContent = "Open BOC Latest";
 
 // ===== Boot =====
 (async function boot(){
