@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+import hashlib
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
@@ -10,6 +11,8 @@ import requests
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.formatting.rule import CellIsRule
 
 BOC_URL = "https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html"
 TIMEOUT = 30
@@ -56,11 +59,13 @@ def fetch_html_with_retries(url: str, retries: int = 3, sleep_s: int = 2) -> str
                 time.sleep(sleep_s)
     raise RuntimeError(f"Failed to fetch after {retries} attempts: {last_err}")
 
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+
 def find_usd_row(soup: BeautifulSoup) -> List[str]:
     tables = soup.find_all("table")
     if not tables:
         raise RuntimeError("No tables found on BOC page.")
-
     for table in tables:
         for tr in table.find_all("tr"):
             tds = tr.find_all("td")
@@ -69,10 +74,9 @@ def find_usd_row(soup: BeautifulSoup) -> List[str]:
             first = normalize_spaces(tds[0].get_text())
             if first.upper() == "USD":
                 return [normalize_spaces(td.get_text()) for td in tds]
-
     raise RuntimeError("USD row not found in any table.")
 
-def fetch_usd_record() -> Dict[str, str]:
+def fetch_usd_record() -> Tuple[Dict[str, str], str]:
     html = fetch_html_with_retries(BOC_URL, retries=3, sleep_s=2)
     soup = BeautifulSoup(html, "html.parser")
     cols = find_usd_row(soup)
@@ -95,7 +99,7 @@ def fetch_usd_record() -> Dict[str, str]:
 
     date_iso, pub_time_iso = try_parse_pub_time(pub_time_raw)
 
-    return {
+    record = {
         "date": date_iso,
         "publishTime": pub_time_iso,
         "publishTimeRaw": pub_time_raw,
@@ -108,6 +112,7 @@ def fetch_usd_record() -> Dict[str, str]:
         "source": BOC_URL,
         "capturedAtUtc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    return record, html
 
 def month_paths(date_iso: str) -> Tuple[str, str, str, str, str]:
     yyyy = date_iso[:4]
@@ -139,9 +144,8 @@ def save_csv(path: str, data: List[Dict[str, str]]) -> None:
         for r in data:
             w.writerow({k: r.get(k, "") for k in fieldnames})
 
-def append_capture_log(path: str, rec: Dict[str, str]) -> None:
-    # Logs every run (even if publishTime unchanged)
-    header = ["capturedAtUtc","publishTime","publishTimeRaw","buying","cashBuying","selling","cashSelling","middle","source"]
+def append_capture_log(path: str, rec: Dict[str, str], html_hash: str) -> None:
+    header = ["capturedAtUtc","publishTime","publishTimeRaw","buying","cashBuying","selling","cashSelling","middle","htmlSha256","source"]
     file_exists = os.path.exists(path)
     with open(path, "a", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
@@ -156,6 +160,7 @@ def append_capture_log(path: str, rec: Dict[str, str]) -> None:
             rec.get("selling",""),
             rec.get("cashSelling",""),
             rec.get("middle",""),
+            html_hash,
             rec.get("source",""),
         ])
 
@@ -196,17 +201,28 @@ def build_daily_tables(all_rows: List[Dict[str, str]]):
         mids = [to_float(r.get("middle","")) for r in rows]
         mids = [m for m in mids if m is not None]
         if mids:
-            avg_rows.append([d, str(publishes), f"{sum(mids)/len(mids):.4f}", f"{min(mids):.4f}", f"{max(mids):.4f}"])
+            avg_rows.append([d, publishes, sum(mids)/len(mids), min(mids), max(mids)])
         else:
-            avg_rows.append([d, str(publishes), "", "", ""])
+            avg_rows.append([d, publishes, None, None, None])
 
     return avg_rows, first_rows
 
+def style_table(ws, header_row=1):
+    header_fill = PatternFill("solid", fgColor="1F2A44")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[header_row]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="left", vertical="center")
+    ws.freeze_panes = ws["A2"]
+    ws.auto_filter.ref = ws.dimensions
+
 def save_xlsx(path: str, all_rows: List[Dict[str, str]]) -> None:
     wb = Workbook()
+
+    # Sheet 1
     ws1 = wb.active
     ws1.title = "All Published Values"
-
     header = ["date","publishTime","buying","cashBuying","selling","cashSelling","middle","publishTimeRaw","capturedAtUtc","source"]
     ws1.append(header)
     for r in all_rows:
@@ -217,18 +233,31 @@ def save_xlsx(path: str, all_rows: List[Dict[str, str]]) -> None:
             r.get("middle",""), r.get("publishTimeRaw",""),
             r.get("capturedAtUtc",""), r.get("source","")
         ])
+    style_table(ws1, 1)
     autosize(ws1)
 
+    # Sheet 2
     ws2 = wb.create_sheet("Daily Summary")
     avg_table, first_table = build_daily_tables(all_rows)
 
     ws2.append(["Day Averages (Middle)"])
-    for row in avg_table:
-        ws2.append(row)
+    ws2.append([])
+    ws2.append(avg_table[0])
+    for row in avg_table[1:]:
+        # numeric formatting
+        ws2.append([
+            row[0], row[1],
+            (None if row[2] is None else round(row[2], 4)),
+            (None if row[3] is None else round(row[3], 4)),
+            (None if row[4] is None else round(row[4], 4)),
+        ])
+    style_table(ws2, header_row=3)
 
     ws2.append([])
     ws2.append(["Day First Published (Middle)"])
-    for row in first_table:
+    ws2.append([])
+    ws2.append(first_table[0])
+    for row in first_table[1:]:
         ws2.append(row)
 
     autosize(ws2)
@@ -244,29 +273,24 @@ def dedupe_and_append(existing: List[Dict[str, str]], new_record: Dict[str, str]
     return existing, True
 
 def main():
-    rec = fetch_usd_record()
+    rec, html = fetch_usd_record()
+    html_hash = sha256_text(html)
+
     _, json_path, csv_path, xlsx_path, caplog_path = month_paths(rec["date"])
 
-    # Always append capture log every run
-    append_capture_log(caplog_path, rec)
+    # Always log every run (proves 5-min capture) + audit hash
+    append_capture_log(caplog_path, rec, html_hash)
     print("[OK] Capture log appended:", caplog_path)
 
     existing = load_json(json_path)
     updated, changed = dedupe_and_append(existing, rec)
 
-    if changed:
+    if changed or (not os.path.exists(json_path)):
         save_json(json_path, updated)
         save_csv(csv_path, updated)
         save_xlsx(xlsx_path, updated)
         print("[OK] Published series updated.")
     else:
-        # Still write files if they don't exist yet (first run case)
-        if not os.path.exists(json_path):
-            save_json(json_path, updated)
-        if not os.path.exists(csv_path):
-            save_csv(csv_path, updated)
-        if not os.path.exists(xlsx_path):
-            save_xlsx(xlsx_path, updated)
         print("[INFO] No new publishTime. Published series unchanged.")
 
 if __name__ == "__main__":
