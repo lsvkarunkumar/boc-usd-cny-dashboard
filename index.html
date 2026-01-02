@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BOC USD/CNY Dashboard</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- AUTH OVERLAY (Manual approval via data/users.json) -->
+  <div id="authOverlay" class="authOverlay">
+    <div class="authCard">
+      <h2>Access Required</h2>
+      <p class="small">Enter your email. If not approved, request access.</p>
+
+      <label>
+        Email
+        <input id="loginEmail" placeholder="name@company.com" inputmode="email" />
+      </label>
+
+      <div class="row" style="margin-top:10px">
+        <button id="btnLogin">Login</button>
+        <button id="btnLogout" class="btnGhost" style="display:none">Logout</button>
+      </div>
+
+      <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+
+      <h3 style="margin:0 0 8px">Request Access</h3>
+      <label>
+        Full Name
+        <input id="regName" placeholder="Full name" />
+      </label>
+      <label style="margin-top:10px">
+        Email
+        <input id="regEmail" placeholder="name@company.com" inputmode="email" />
+      </label>
+
+      <div class="row" style="margin-top:10px">
+        <button id="btnRegister">Register</button>
+      </div>
+
+      <p id="authMsg" class="small" style="margin-top:10px;color:var(--muted)"></p>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="title">
+      <h1>BOC USD/CNY (As Published: RMB per 100 USD)</h1>
+      <p id="subtitle">Dashboard • Mobile-ready • Lagos time</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="controls card">
+      <div class="row">
+        <label>
+          Year
+          <select id="yearSelect"></select>
+        </label>
+
+        <label>
+          Month
+          <select id="monthSelect"></select>
+        </label>
+
+        <label>
+          Rate Column
+          <select id="rateColumn">
+            <option value="middle">Middle Rate</option>
+            <option value="buying">Buying Rate</option>
+            <option value="selling">Selling Rate</option>
+            <option value="cashBuying">Cash Buying</option>
+            <option value="cashSelling">Cash Selling</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnDownloadCsv">Download CSV</button>
+        <button id="btnDownloadJson">Download JSON</button>
+
+        <div class="emailBox">
+          <input id="emailTo" placeholder="Enter email address" inputmode="email" />
+          <button id="btnEmail">Email</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card wide">
+        <h2>Tab 1 — Monthly Raw Records (All publishes)</h2>
+        <p class="hint">Shows every BOC published row for the selected month (multiple rows per day possible). Values are “as published” (RMB per 100 USD).</p>
+        <div class="tableWrap">
+          <table id="rawTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Publish Time</th>
+                <th>Buying</th>
+                <th>Cash Buying</th>
+                <th>Selling</th>
+                <th>Cash Selling</th>
+                <th>Middle</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Tab 2 — Daily Averages (Year)</h2>
+        <p class="hint">Daily average of the selected column, plus % change vs previous day.</p>
+        <div class="chartWrap"><canvas id="avgChart"></canvas></div>
+        <div class="tableWrap">
+          <table id="avgTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Avg (Selected)</th>
+                <th>% Change vs Prev Day</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Publishes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Tab 3 — Daily First Published (Year)</h2>
+        <p class="hint">Earliest publish of each day (based on BOC publish time), plus % change vs previous day.</p>
+        <div class="chartWrap"><canvas id="firstChart"></canvas></div>
+        <div class="tableWrap">
+          <table id="firstTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>First Publish Time</th>
+                <th>Value (Selected)</th>
+                <th>% Change vs Prev Day</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card wide">
+        <h2>USD Impact (based on CNY exposure)</h2>
+        <p class="hint">
+          Rates displayed are “as published” (RMB per 100 USD). USD impact is computed from a CNY exposure (e.g., vendor payments in CNY).
+        </p>
+        <div class="row">
+          <label>
+            CNY Exposure
+            <input id="cnyExposure" type="number" value="1500000000" min="0" step="1000000">
+          </label>
+          <button id="btnRecalcImpact">Recalculate</button>
+        </div>
+        <div id="impactBox" class="impactBox"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
+  </script>
+</body>
+</html>
