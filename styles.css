@@ -5,8 +5,10 @@
   --muted:#a9b5d6;
   --border:#223154;
   --accent:#6ea8fe;
+  --accent2:#3b82f6;
   --warn:#ffd166;
 }
+
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -29,62 +31,82 @@ body{
   gap:12px;
   flex-wrap:wrap;
 }
+
 .title h1{margin:0;font-size:16px}
 .title p{margin:6px 0 0;color:var(--muted);font-size:12px}
 
 .topActions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
-/* MAKE IT LOOK LIKE A REAL BUTTON */
 .linkBtn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
   padding:10px 12px;
-  border-radius:10px;
-  border:1px solid var(--accent);
+  border-radius:12px;
+  border:1px solid var(--accent2);
   color:#071022;
   text-decoration:none;
-  background:var(--accent);
+  background:linear-gradient(180deg,var(--accent),var(--accent2));
   font-weight:900;
 }
 .linkBtn:hover{filter:brightness(1.05)}
 .linkBtn:active{transform:translateY(1px)}
 
-.container{max-width:1400px;margin:0;padding:16px;width:100%}
+.container{
+  max-width:1400px;
+  margin:0;            /* LEFT aligned */
+  padding:16px;
+  width:100%;
+}
 
 .card{
   background:var(--card);
   border:1px solid var(--border);
-  border-radius:14px;
+  border-radius:16px;
   padding:14px;
   box-shadow: 0 10px 20px rgba(0,0,0,.25);
   width:100%;
 }
 
-.controls .row, .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.controls .row, .row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:end
+}
 
-label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:12px;
+  color:var(--muted)
+}
+
 select,input{
   background:#0e1628;
   color:var(--text);
   border:1px solid var(--border);
-  border-radius:10px;
-  padding:10px;
+  border-radius:12px;
+  padding:10px 12px;
   outline:none;
   min-width:180px;
 }
 
 button{
-  background:var(--accent);
   border:0;
   color:#071022;
   padding:10px 12px;
-  border-radius:10px;
+  border-radius:12px;
   cursor:pointer;
   font-weight:900;
+  background:var(--accent);
 }
+button:hover{filter:brightness(1.03)}
 button:active{transform:translateY(1px)}
+
 .btnGhost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btnPrimary{background:linear-gradient(180deg,var(--accent),var(--accent2));}
 .btnWarn{background:var(--warn);}
 
 .emailBox{display:flex;gap:8px;flex:1;min-width:260px}
@@ -101,7 +123,7 @@ button:active{transform:translateY(1px)}
 
 .tableWrap{
   overflow:auto;
-  border-radius:12px;
+  border-radius:14px;
   border:1px solid var(--border);
   max-width:100%;
 }
@@ -109,10 +131,10 @@ table{
   width:100%;
   border-collapse:collapse;
   background:#0e1628;
-  min-width:900px;
+  min-width:980px;
 }
 th,td{
-  padding:10px;
+  padding:10px 12px;
   border-bottom:1px solid var(--border);
   font-size:12px;
   white-space:nowrap;
@@ -121,7 +143,7 @@ th{position:sticky;top:0;background:#0f1a31;text-align:left}
 
 .chartWrap{
   border:1px solid var(--border);
-  border-radius:12px;
+  border-radius:14px;
   padding:10px;
   background:#0e1628;
   margin-bottom:12px;
@@ -132,29 +154,8 @@ th{position:sticky;top:0;background:#0f1a31;text-align:left}
 .impactBox{
   margin-top:10px;
   padding:12px;
-  border-radius:12px;
+  border-radius:14px;
   background:#0e1628;
   border:1px solid var(--border);
   color:var(--text);
-}
-
-.small{color:var(--muted);font-size:12px}
-
-/* AUTH */
-.authOverlay{
-  position:fixed; inset:0;
-  background:rgba(0,0,0,.55);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:16px;
-  z-index:9999;
-}
-.authCard{
-  width:min(520px, 100%);
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:16px;
-  box-shadow: 0 20px 40px rgba(0,0,0,.35);
 }
