@@ -7,23 +7,50 @@
   --accent:#6ea8fe;
 }
 *{box-sizing:border-box}
+html,body{height:100%}
 body{
   margin:0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   background:var(--bg);
   color:var(--text);
+  min-height:100vh;
 }
+
 .topbar{
   position:sticky; top:0; z-index:10;
   background:rgba(11,18,32,.92);
   backdrop-filter: blur(8px);
   border-bottom:1px solid var(--border);
   padding:14px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
 }
 .title h1{margin:0;font-size:16px}
 .title p{margin:6px 0 0;color:var(--muted);font-size:12px}
 
-.container{max-width:1200px;margin:0 auto;padding:16px}
+.topActions{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.linkBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  color:var(--text);
+  text-decoration:none;
+  background:transparent;
+  font-weight:700;
+}
+
+.container{max-width:1400px;margin:0 auto;padding:16px; width:100%}
 
 .card{
   background:var(--card);
@@ -31,11 +58,10 @@ body{
   border-radius:14px;
   padding:14px;
   box-shadow: 0 10px 20px rgba(0,0,0,.25);
+  width:100%;
 }
 
-.controls .row{
-  display:flex; gap:10px; flex-wrap:wrap; align-items:end;
-}
+.controls .row,
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:end;}
 
 label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
@@ -46,6 +72,7 @@ select,input{
   border-radius:10px;
   padding:10px;
   outline:none;
+  min-width:180px;
 }
 button{
   background:var(--accent);
@@ -54,12 +81,12 @@ button{
   padding:10px 12px;
   border-radius:10px;
   cursor:pointer;
-  font-weight:700;
+  font-weight:800;
 }
 button:active{transform:translateY(1px)}
 
 .emailBox{display:flex;gap:8px;flex:1;min-width:260px}
-.emailBox input{flex:1}
+.emailBox input{flex:1; min-width:220px}
 
 .grid{
   display:grid;
@@ -69,7 +96,7 @@ button:active{transform:translateY(1px)}
 }
 .card.wide{grid-column:auto;}
 
-@media(min-width: 960px){
+@media(min-width: 1100px){
   .grid{grid-template-columns: 1fr 1fr;}
   .card.wide{grid-column:1 / -1;}
 }
@@ -80,23 +107,25 @@ button:active{transform:translateY(1px)}
   overflow:auto;
   border-radius:12px;
   border:1px solid var(--border);
+  max-width:100%;
 }
 table{
   width:100%;
   border-collapse:collapse;
-  min-width:820px;
-  background:#0e1628
+  background:#0e1628;
+  min-width:900px;
 }
 th,td{
   padding:10px 10px;
   border-bottom:1px solid var(--border);
-  font-size:12px
+  font-size:12px;
+  white-space:nowrap;
 }
 th{
   position:sticky;
   top:0;
   background:#0f1a31;
-  text-align:left
+  text-align:left;
 }
 
 .chartWrap{
@@ -105,8 +134,9 @@ th{
   padding:10px;
   background:#0e1628;
   margin-bottom:12px;
+  height:320px;   /* fixed container height so it fits nicely */
 }
-.chartWrap canvas{width:100%; height:260px;}
+.chartWrap canvas{width:100% !important; height:100% !important;}
 
 .impactBox{
   margin-top:10px;
