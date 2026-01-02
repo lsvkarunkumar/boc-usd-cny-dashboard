@@ -100,9 +100,16 @@ input{ width:200px; }
   background:#0c1529;
 }
 
-.tableWrap.scroll5{
-  max-height:220px;   /* fixed area */
-  overflow-y:auto;    /* scroll when more than 5 */
+/* Intraday table (show last 12 rows) */
+.tableWrap.scrollBox{
+  max-height:320px;
+  overflow-y:auto;
+}
+
+/* Monthly Raw table (Tab 1) */
+.tableWrap.scrollBoxLarge{
+  max-height:420px;
+  overflow-y:auto;
 }
 
 table{
