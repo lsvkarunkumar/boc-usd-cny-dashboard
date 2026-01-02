@@ -1,4 +1,4 @@
-const CACHE = "bocfx-v7";
+const CACHE = "bocfx-v8";
 const ASSETS = [
   "./",
   "./index.html",
