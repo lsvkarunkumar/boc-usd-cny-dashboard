@@ -2,6 +2,7 @@ name: Fetch BOC USD Snapshot
 
 on:
   schedule:
+    # GitHub minimum schedule is every 5 minutes
     - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
@@ -33,14 +34,21 @@ jobs:
         run: |
           python scripts/fetch_boc_usd.py
 
-      - name: Commit & push (if changed)
+      - name: Commit & push (rebase-safe)
         run: |
+          set -e
           git config user.name "bocfx-bot"
           git config user.email "bocfx-bot@users.noreply.github.com"
+
           git add data || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
+
           git commit -m "Update BOC USD rates (auto)"
-          git push
+
+          # Fix: remote has new commits (e.g., Pages). Rebase then push.
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
