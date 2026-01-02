@@ -1,0 +1,4 @@
+date,publishTime,publishTimeRaw,currency,buying,cashBuying,selling,cashSelling,middle,source,capturedAtUtc
+2026-01-01,2026-01-01 00:05:00,,,690.10,688.20,694.20,696.10,692.15,,
+2026-01-01,2026-01-01 10:30:00,,,691.00,689.00,695.20,697.10,693.10,,
+2026-01-02,2026-01-02 17:43:08,2026/01/02 17:43:08,USD,697.85,697.85,700.79,700.79,702.88,https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html,2026-01-02 09:49:51
