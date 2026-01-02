@@ -59,6 +59,7 @@
         <button id="btnDownloadCsv">Export CSV</button>
         <button id="btnDownloadJson" class="btnGhost">Export JSON</button>
         <button id="btnDownloadXls" class="btnPrimary">Export Excel</button>
+        <button id="btnDownloadCaptureLog" class="btnGhost">Export Capture Log</button>
 
         <button id="btnRunNow" class="btnWarn">Run Now</button>
 
@@ -69,11 +70,53 @@
       </div>
 
       <p class="hint">
-        Tip: “vs Previous Publish” shows intraday sensitivity; “vs Previous Day Average” shows the daily FX exposure impact.
+        “Capture Log” updates every run (every 5 mins). “Published Series” updates only when BOC Publish Time changes.
       </p>
     </section>
 
     <section class="grid">
+      <!-- NEW: Last Updated widget -->
+      <div class="card wide">
+        <h2>Live Monitor — Last Updated</h2>
+        <div class="row">
+          <button id="btnLoadLive" class="btnPrimary">Load Live Status</button>
+          <div style="flex:1"></div>
+          <div class="hint">Source: monthly capture log (auto)</div>
+        </div>
+        <div id="liveBox" class="impactBox"></div>
+      </div>
+
+      <!-- NEW: Intraday chart -->
+      <div class="card wide">
+        <h2>Intraday — Selected Day (Value + Running Average)</h2>
+        <div class="row">
+          <label>
+            Select Date (within chosen month)
+            <select id="daySelect"></select>
+          </label>
+          <button id="btnDrawIntraday">Draw Intraday</button>
+          <div style="flex:1"></div>
+          <div class="hint">Uses published series (deduped publish events)</div>
+        </div>
+
+        <div class="chartWrap"><canvas id="intradayChart"></canvas></div>
+
+        <div class="tableWrap">
+          <table id="intradayTable">
+            <thead>
+              <tr>
+                <th>Publish Time</th>
+                <th>Value (Selected)</th>
+                <th>Running Avg</th>
+                <th>% Change vs Prev</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Existing: Raw monthly records -->
       <div class="card wide">
         <h2>Tab 1 — Monthly Raw Records (All Captured Publish Events)</h2>
         <p class="hint">USD Impact uses Middle rate (RMB per 100 USD) and your CNY exposure.</p>
@@ -97,6 +140,7 @@
         </div>
       </div>
 
+      <!-- Existing: Daily averages -->
       <div class="card">
         <h2>Tab 2 — Daily Averages (Year)</h2>
         <div class="chartWrap"><canvas id="avgChart"></canvas></div>
@@ -117,6 +161,7 @@
         </div>
       </div>
 
+      <!-- Existing: Daily first published -->
       <div class="card">
         <h2>Tab 3 — Daily First Published (Year)</h2>
         <div class="chartWrap"><canvas id="firstChart"></canvas></div>
@@ -135,6 +180,7 @@
         </div>
       </div>
 
+      <!-- Existing: USD impact box -->
       <div class="card wide">
         <h2>USD Impact (based on CNY exposure)</h2>
         <div class="row">
