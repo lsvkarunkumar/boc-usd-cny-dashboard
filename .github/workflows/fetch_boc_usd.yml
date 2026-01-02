@@ -2,12 +2,12 @@ name: Fetch BOC USD Snapshot
 
 on:
   schedule:
-    # GitHub minimum schedule is every 5 minutes
     - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: boc-usd-fetch
@@ -34,6 +34,12 @@ jobs:
         run: |
           python scripts/fetch_boc_usd.py
 
+      - name: Check alerts and create GitHub Issue (free email)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/alert_boc_usd.py
+
       - name: Commit & push (rebase-safe)
         run: |
           set -e
@@ -48,7 +54,6 @@ jobs:
 
           git commit -m "Update BOC USD rates (auto)"
 
-          # Fix: remote has new commits (e.g., Pages). Rebase then push.
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
