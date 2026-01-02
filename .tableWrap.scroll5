@@ -1,0 +1,4 @@
+.tableWrap.scrollBox{
+  max-height:320px;   /* enough space for ~12 rows */
+  overflow-y:auto;
+}
