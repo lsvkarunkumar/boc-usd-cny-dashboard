@@ -13,7 +13,7 @@
   <header class="topbar">
     <div class="title">
       <h1>BOC USD/CNY (As Published: RMB per 100 USD)</h1>
-      <p id="subtitle">Auto-capture every 5 minutes • Mobile-ready • Lagos time</p>
+      <p id="subtitle">Official BOC published values • Auto-capture every 5 minutes • Lagos time</p>
     </div>
 
     <div class="topActions">
@@ -47,11 +47,13 @@
         </label>
 
         <label>
-          USD Impact Mode
-          <select id="impactMode">
-            <option value="prev_publish">vs Previous Publish</option>
-            <option value="prev_day_avg">vs Previous Day Average</option>
-          </select>
+          USD Exposure (default 1.5B)
+          <input id="usdExposure" type="number" value="1500000000" min="0" step="1000000">
+        </label>
+
+        <label>
+          Baseline Rate (RMB per 100 USD)
+          <input id="baselineRate" type="number" value="714.60" min="0" step="0.01">
         </label>
       </div>
 
@@ -70,23 +72,26 @@
       </div>
 
       <p class="hint">
-        “Capture Log” updates every run (every 5 mins). “Published Series” updates only when BOC Publish Time changes.
+        Logic: You enter USD exposure at baseline rate → baseline CNY obligation becomes fixed → dashboard shows extra USD required vs baseline (all in M).
       </p>
     </section>
 
     <section class="grid">
-      <!-- NEW: Last Updated widget -->
       <div class="card wide">
-        <h2>Live Monitor — Last Updated</h2>
+        <h2>Live Monitor — Last Updated (from Capture Log)</h2>
         <div class="row">
           <button id="btnLoadLive" class="btnPrimary">Load Live Status</button>
           <div style="flex:1"></div>
-          <div class="hint">Source: monthly capture log (auto)</div>
+          <div class="hint">Capture log updates every run (every 5 mins)</div>
         </div>
         <div id="liveBox" class="impactBox"></div>
       </div>
 
-      <!-- NEW: Intraday chart -->
+      <div class="card wide">
+        <h2>Baseline FX Impact Summary (USD, in Millions)</h2>
+        <div id="impactBox" class="impactBox"></div>
+      </div>
+
       <div class="card wide">
         <h2>Intraday — Selected Day (Value + Running Average)</h2>
         <div class="row">
@@ -96,7 +101,7 @@
           </label>
           <button id="btnDrawIntraday">Draw Intraday</button>
           <div style="flex:1"></div>
-          <div class="hint">Uses published series (deduped publish events)</div>
+          <div class="hint">Uses Published Series (deduped BOC publish events)</div>
         </div>
 
         <div class="chartWrap"><canvas id="intradayChart"></canvas></div>
@@ -116,10 +121,9 @@
         </div>
       </div>
 
-      <!-- Existing: Raw monthly records -->
       <div class="card wide">
-        <h2>Tab 1 — Monthly Raw Records (All Captured Publish Events)</h2>
-        <p class="hint">USD Impact uses Middle rate (RMB per 100 USD) and your CNY exposure.</p>
+        <h2>Tab 1 — Monthly Raw Records (All Published Events)</h2>
+        <p class="hint">USD Impact column = extra USD required vs Baseline (in M).</p>
 
         <div class="tableWrap">
           <table id="rawTable">
@@ -132,7 +136,7 @@
                 <th>Selling</th>
                 <th>Cash Selling</th>
                 <th>Middle</th>
-                <th>USD Impact</th>
+                <th>USD Impact (M)</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -140,7 +144,6 @@
         </div>
       </div>
 
-      <!-- Existing: Daily averages -->
       <div class="card">
         <h2>Tab 2 — Daily Averages (Year)</h2>
         <div class="chartWrap"><canvas id="avgChart"></canvas></div>
@@ -161,7 +164,6 @@
         </div>
       </div>
 
-      <!-- Existing: Daily first published -->
       <div class="card">
         <h2>Tab 3 — Daily First Published (Year)</h2>
         <div class="chartWrap"><canvas id="firstChart"></canvas></div>
@@ -178,19 +180,6 @@
             <tbody></tbody>
           </table>
         </div>
-      </div>
-
-      <!-- Existing: USD impact box -->
-      <div class="card wide">
-        <h2>USD Impact (based on CNY exposure)</h2>
-        <div class="row">
-          <label>
-            CNY Exposure (default 1.5B)
-            <input id="cnyExposure" type="number" value="1500000000" min="0" step="1000000">
-          </label>
-          <button id="btnRecalcImpact">Recalculate</button>
-        </div>
-        <div id="impactBox" class="impactBox"></div>
       </div>
     </section>
   </main>
