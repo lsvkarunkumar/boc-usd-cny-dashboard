@@ -4,7 +4,11 @@ const els = {
   yearSelect: document.getElementById("yearSelect"),
   monthSelect: document.getElementById("monthSelect"),
   rateColumn: document.getElementById("rateColumn"),
-  impactMode: document.getElementById("impactMode"),
+
+  usdExposure: document.getElementById("usdExposure"),
+  baselineRate: document.getElementById("baselineRate"),
+  btnLockBaseline: document.getElementById("btnLockBaseline"),
+  alertThresholdM: document.getElementById("alertThresholdM"),
 
   rawTbody: document.querySelector("#rawTable tbody"),
   avgTbody: document.querySelector("#avgTable tbody"),
@@ -23,13 +27,11 @@ const els = {
   emailTo: document.getElementById("emailTo"),
   btnEmail: document.getElementById("btnEmail"),
 
-  cnyExposure: document.getElementById("cnyExposure"),
-  btnRecalcImpact: document.getElementById("btnRecalcImpact"),
-  impactBox: document.getElementById("impactBox"),
-
-  // Live + Intraday
   btnLoadLive: document.getElementById("btnLoadLive"),
   liveBox: document.getElementById("liveBox"),
+
+  impactBox: document.getElementById("impactBox"),
+
   daySelect: document.getElementById("daySelect"),
   btnDrawIntraday: document.getElementById("btnDrawIntraday"),
   intradayTbody: document.querySelector("#intradayTable tbody"),
@@ -40,12 +42,33 @@ let yearDaily = [];
 let avgChart = null;
 let firstChart = null;
 let intradayChart = null;
+let pnlChart = null;
 
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
   }[m]));
 }
+function toNum(x){
+  const n = Number(String(x).trim());
+  return Number.isFinite(n) ? n : null;
+}
+function pctChange(curr, prev){
+  if(!Number.isFinite(prev) || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+function fmt(n, dp=2){
+  if(!Number.isFinite(n)) return "-";
+  return Number(n).toFixed(dp);
+}
+function fmtM0(v){
+  if(!Number.isFinite(v)) return "-";
+  return (v/1_000_000).toFixed(0); // millions, no decimals
+}
+function chartsAvailable(){
+  return typeof Chart !== "undefined";
+}
+
 function todayISO(){
   const d = new Date();
   return { yyyy: d.getFullYear(), mm: String(d.getMonth()+1).padStart(2,"0") };
@@ -71,30 +94,8 @@ function setOptions(){
   });
   els.monthSelect.value = now.mm;
 }
-function toNum(x){
-  const n = Number(String(x).trim());
-  return Number.isFinite(n) ? n : null;
-}
-function pctChange(curr, prev){
-  if(!Number.isFinite(prev) || prev === 0) return null;
-  return ((curr - prev) / prev) * 100;
-}
-function fmt(n, dp=2){
-  if(!Number.isFinite(n)) return "-";
-  return Number(n).toFixed(dp);
-}
-function fmtIntSigned(n){
-  if(!Number.isFinite(n)) return "-";
-  const v = Math.round(n);
-  if (v > 0) return `+${v.toLocaleString()}`;
-  if (v < 0) return `${v.toLocaleString()}`;
-  return "0";
-}
-function chartsAvailable(){
-  return typeof Chart !== "undefined";
-}
 
-// Official latest snapshot page
+// Official BOC link
 els.bocLatestLink.href = "https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html";
 els.bocLatestLink.textContent = "Open BOC Latest";
 
@@ -103,32 +104,23 @@ async function fetchJson(url){
     const resp = await fetch(url, {cache:"no-store"});
     if(!resp.ok) return null;
     return await resp.json();
-  }catch{
-    return null;
-  }
+  }catch{ return null; }
 }
-
 async function fetchText(url){
   try{
     const resp = await fetch(url, {cache:"no-store"});
     if(!resp.ok) return null;
     return await resp.text();
-  }catch{
-    return null;
-  }
+  }catch{ return null; }
 }
-
 function parseCsv(text){
-  // simple robust CSV parser (handles quoted values)
   const rows = [];
   let row = [];
   let cur = "";
   let inQ = false;
-
   for(let i=0;i<text.length;i++){
     const ch = text[i];
     const next = text[i+1];
-
     if(inQ){
       if(ch === '"' && next === '"'){ cur += '"'; i++; }
       else if(ch === '"'){ inQ = false; }
@@ -149,7 +141,6 @@ function parseCsv(text){
   if(row.length > 1 || (row.length===1 && row[0].trim() !== "")) rows.push(row);
   return rows;
 }
-
 function downloadText(filename, text, mime){
   const blob = new Blob([text], {type:mime});
   const url = URL.createObjectURL(blob);
@@ -162,19 +153,53 @@ function downloadText(filename, text, mime){
   URL.revokeObjectURL(url);
 }
 
+// ===== FX MODEL (YOUR FINAL REQUIREMENT) =====
+// You input USD Exposure (e.g., 1.5B) at Base rate (714.60 per 100 USD).
+// That defines FIXED CNY obligation: BaseCNY = USDexp * (BaseRate/100).
+// USD required at any current rate R: USDnow = BaseCNY / (R/100).
+// USD Impact = USDnow - USDexp.
+function calcBaseCny(usdExp, baseRate){
+  return usdExp * (baseRate/100);
+}
+function usdRequired(baseCny, rate){
+  return baseCny / (rate/100);
+}
+
+function monthKey(){
+  return `${els.yearSelect.value}-${els.monthSelect.value}`;
+}
+function loadBaselineForMonth(){
+  const key = `baseline:${monthKey()}`;
+  const saved = localStorage.getItem(key);
+  if(saved){
+    const v = Number(saved);
+    if(Number.isFinite(v) && v>0) els.baselineRate.value = String(v);
+  }
+}
+function lockBaselineForMonth(){
+  const key = `baseline:${monthKey()}`;
+  const v = Number(els.baselineRate.value || 0);
+  if(Number.isFinite(v) && v>0){
+    localStorage.setItem(key, String(v));
+    alert(`Baseline locked for ${monthKey()}: ${v}`);
+  } else {
+    alert("Invalid baseline rate.");
+  }
+}
+
+// ===== Data load =====
 async function loadMonth(){
+  loadBaselineForMonth();
+
   const y = els.yearSelect.value;
   const m = els.monthSelect.value;
-  const url = `data/${y}/${y}-${m}.json`;
+  currentData = (await fetchJson(`data/${y}/${y}-${m}.json`)) || [];
 
-  currentData = (await fetchJson(url)) || [];
-
-  // Build year aggregates first (used by impact mode prev_day_avg)
   await loadYearAgg();
-
   renderDayOptions();
   renderRaw();
   renderImpact();
+  drawPnL();
 }
 
 function renderDayOptions(){
@@ -193,24 +218,10 @@ function renderDayOptions(){
     o.textContent = d;
     els.daySelect.appendChild(o);
   });
-  els.daySelect.value = dates[dates.length-1]; // default latest
+  els.daySelect.value = dates[dates.length-1];
 }
 
-function usdFromCnyExposure(exposureCny, rateRmbPer100Usd){
-  const r = rateRmbPer100Usd / 100; // RMB per 1 USD
-  return exposureCny / r;
-}
-
-function buildPrevDayAvgMap(){
-  const map = new Map();
-  for(let i=0;i<yearDaily.length;i++){
-    const today = yearDaily[i];
-    const prev = yearDaily[i-1];
-    map.set(today.date, prev ? prev.avgMiddle : null);
-  }
-  return map;
-}
-
+// ===== Tab1 Raw table with USD Impact (M) vs baseline =====
 function renderRaw(){
   els.rawTbody.innerHTML = "";
   if(currentData.length === 0){
@@ -218,36 +229,23 @@ function renderRaw(){
     return;
   }
 
-  const exposureCny = Number(els.cnyExposure.value || 1500000000);
-  const mode = els.impactMode.value;
+  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const baseRate = Number(els.baselineRate.value || 714.6);
+  if(!Number.isFinite(usdExp) || !Number.isFinite(baseRate) || baseRate<=0){
+    els.rawTbody.innerHTML = `<tr><td colspan="8">Invalid USD exposure or baseline rate.</td></tr>`;
+    return;
+  }
+
+  const baseCny = calcBaseCny(usdExp, baseRate);
 
   const rows = [...currentData].sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
-  const prevDayAvgMap = buildPrevDayAvgMap();
-
-  for(let i=0;i<rows.length;i++){
-    const r = rows[i];
+  for(const r of rows){
     const mid = toNum(r.middle);
-    let usdImpact = null;
-
-    if (Number.isFinite(mid)) {
-      if (mode === "prev_publish") {
-        const prev = rows[i-1];
-        const prevMid = prev ? toNum(prev.middle) : null;
-        if (Number.isFinite(prevMid)) {
-          const usdNow = usdFromCnyExposure(exposureCny, mid);
-          const usdPrev = usdFromCnyExposure(exposureCny, prevMid);
-          usdImpact = usdNow - usdPrev;
-        }
-      } else if (mode === "prev_day_avg") {
-        const prevAvgMiddle = prevDayAvgMap.get(r.date);
-        if (Number.isFinite(prevAvgMiddle)) {
-          const usdNow = usdFromCnyExposure(exposureCny, mid);
-          const usdPrevDay = usdFromCnyExposure(exposureCny, prevAvgMiddle);
-          usdImpact = usdNow - usdPrevDay;
-        }
-      }
+    let impact = null;
+    if(Number.isFinite(mid)){
+      const usdNow = usdRequired(baseCny, mid);
+      impact = usdNow - usdExp;
     }
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${esc(r.date)}</td>
@@ -257,20 +255,19 @@ function renderRaw(){
       <td>${esc(r.selling)}</td>
       <td>${esc(r.cashSelling)}</td>
       <td>${esc(r.middle)}</td>
-      <td>${usdImpact===null ? "-" : fmtIntSigned(usdImpact)}</td>
+      <td>${impact===null ? "-" : (impact>=0?"+":"") + fmtM0(impact)}</td>
     `;
     els.rawTbody.appendChild(tr);
   }
 }
 
+// ===== Year aggregations (for daily charts/tables) =====
 async function loadYearAgg(){
   const y = els.yearSelect.value;
   yearDaily = [];
-
   const allRows = [];
   for(const m of monthNames){
-    const url = `data/${y}/${y}-${m}.json`;
-    const arr = await fetchJson(url);
+    const arr = await fetchJson(`data/${y}/${y}-${m}.json`);
     if(Array.isArray(arr)) allRows.push(...arr);
   }
 
@@ -307,6 +304,7 @@ async function loadYearAgg(){
   renderFirst();
 }
 
+// Tab2
 function renderAvg(){
   els.avgTbody.innerHTML = "";
   if(yearDaily.length === 0){
@@ -314,7 +312,6 @@ function renderAvg(){
     if(avgChart) avgChart.destroy();
     return;
   }
-
   for(let i=0;i<yearDaily.length;i++){
     const r = yearDaily[i];
     const prev = yearDaily[i-1];
@@ -345,6 +342,7 @@ function renderAvg(){
   }
 }
 
+// Tab3
 function renderFirst(){
   els.firstTbody.innerHTML = "";
   if(yearDaily.length === 0){
@@ -352,7 +350,6 @@ function renderFirst(){
     if(firstChart) firstChart.destroy();
     return;
   }
-
   for(let i=0;i<yearDaily.length;i++){
     const r = yearDaily[i];
     const prev = yearDaily[i-1];
@@ -381,66 +378,84 @@ function renderFirst(){
   }
 }
 
-// ===== NEW: Live Monitor (Last Updated) =====
-async function loadLiveStatus(){
-  const y = els.yearSelect.value;
-  const m = els.monthSelect.value;
-  const url = `data/${y}/${y}-${m}-capturelog.csv`;
+// ===== Impact summary box (M) =====
+function renderImpact(){
+  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const baseRate = Number(els.baselineRate.value || 714.6);
 
-  els.liveBox.innerHTML = `<div style="color:var(--muted)">Loading capture log…</div>`;
-  const text = await fetchText(url);
+  const rows = [...currentData].sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
+  const last = rows.length ? rows[rows.length-1] : null;
+  const currentRate = last ? toNum(last.middle) : null;
 
-  if(!text){
-    els.liveBox.innerHTML = `
-      <div><b>Status:</b> capture log not found for ${y}-${m}</div>
-      <div style="margin-top:8px;color:var(--muted)">
-        Check: scripts/fetch_boc_usd.py must write capturelog each run, and Actions schedule must be running.
-      </div>
-    `;
+  if(!Number.isFinite(usdExp) || !Number.isFinite(baseRate) || baseRate<=0 || !Number.isFinite(currentRate)){
+    els.impactBox.innerHTML = `<div style="color:var(--muted)">Need valid USD exposure, baseline and latest Middle rate.</div>`;
     return;
   }
 
-  const rows = parseCsv(text);
-  if(rows.length < 2){
-    els.liveBox.innerHTML = `<div><b>Status:</b> capture log is empty.</div>`;
-    return;
-  }
+  const baseCny = calcBaseCny(usdExp, baseRate);
+  const usdNow = usdRequired(baseCny, currentRate);
+  const usdImpact = usdNow - usdExp;
 
-  const header = rows[0].map(h => String(h).trim());
-  const last = rows[rows.length - 1];
+  // Sensitivity at CURRENT rate for +0.01 move
+  const usdPlus001 = usdRequired(baseCny, currentRate + 0.01);
+  const sens = usdPlus001 - usdNow;
 
-  const idx = (name) => header.indexOf(name);
+  const impactColor = usdImpact >= 0 ? "#ff4d4f" : "#00c48c";
 
-  const capturedAt = last[idx("capturedAtUtc")] ?? "";
-  const publishTime = last[idx("publishTime")] ?? "";
-  const middle = last[idx("middle")] ?? "";
-  const htmlHash = last[idx("htmlSha256")] ?? "";
-  const source = last[idx("source")] ?? "";
-
-  // Compare with previous line for "publish changed?"
-  const prev = rows.length >= 3 ? rows[rows.length - 2] : null;
-  const prevPublish = prev ? (prev[idx("publishTime")] ?? "") : "";
-  const changed = (publishTime && prevPublish && publishTime !== prevPublish);
-
-  els.liveBox.innerHTML = `
-    <div><b>Last Capture (UTC):</b> ${esc(capturedAt)}</div>
-    <div><b>Last Publish Time:</b> ${esc(publishTime)}</div>
-    <div><b>Last Middle:</b> ${esc(middle)}</div>
-    <div><b>Publish Changed vs Previous Capture:</b> ${changed ? "<b>YES</b>" : "No"}</div>
+  els.impactBox.innerHTML = `
+    <div><b>Baseline Rate:</b> ${esc(baseRate)}  |  <b>Latest Rate (Middle):</b> ${esc(currentRate)}  |  <b>Latest Publish:</b> ${esc(last.publishTime)}</div>
     <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
-    <div style="color:var(--muted);font-size:12px"><b>HTML SHA256:</b> ${esc(htmlHash || "-")}</div>
-    <div style="color:var(--muted);font-size:12px"><b>Source:</b> ${esc(source || "-")}</div>
+    <div><b>Base USD Required:</b> ${fmtM0(usdExp)} M</div>
+    <div><b>USD Required Now:</b> ${fmtM0(usdNow)} M</div>
+    <div style="margin-top:8px"><b>USD Impact:</b>
+      <span style="font-weight:800;color:${impactColor}">${usdImpact>=0?"+":""}${fmtM0(usdImpact)} M</span>
+    </div>
+    <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
+    <div><b>Sensitivity:</b> Every 0.01 move ≈ ${Math.abs(Number(fmtM0(sens))).toLocaleString()} M USD</div>
+    <div class="hint">Alert threshold (from input): ${esc(els.alertThresholdM.value)} M</div>
   `;
 }
 
-// ===== NEW: Intraday chart + table =====
+// ===== FX P&L Chart (Daily USD Impact vs Baseline, in M) =====
+function drawPnL(){
+  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const baseRate = Number(els.baselineRate.value || 714.6);
+  if(!Number.isFinite(usdExp) || !Number.isFinite(baseRate) || baseRate<=0){
+    if(pnlChart) pnlChart.destroy();
+    return;
+  }
+  const baseCny = calcBaseCny(usdExp, baseRate);
+
+  // Use daily avgMiddle for each day
+  const pts = yearDaily
+    .filter(d => Number.isFinite(d.avgMiddle))
+    .map(d => ({
+      date: d.date,
+      impactM: (usdRequired(baseCny, d.avgMiddle) - usdExp) / 1_000_000
+    }));
+
+  if(!chartsAvailable()) return;
+
+  const ctx = document.getElementById("pnlChart");
+  if(pnlChart) pnlChart.destroy();
+  pnlChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: pts.map(p=>p.date),
+      datasets: [
+        { label: "USD Impact (M) vs Baseline", data: pts.map(p=>p.impactM) }
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false }
+  });
+}
+
+// ===== Intraday chart + LAST 5 rows table =====
 function timeOnly(publishTime){
-  // publishTime is "YYYY-MM-DD HH:MM:SS"
   const s = String(publishTime || "");
   const parts = s.split(" ");
   return parts.length >= 2 ? parts[1] : s;
 }
-
 function drawIntraday(){
   const day = els.daySelect.value;
   els.intradayTbody.innerHTML = "";
@@ -460,16 +475,15 @@ function drawIntraday(){
   const values = rows.map(r => toNum(r[col]));
   const labels = rows.map(r => timeOnly(r.publishTime));
 
-  // Running average
-  let sum = 0;
-  let cnt = 0;
+  let sum = 0, cnt = 0;
   const runAvg = values.map(v => {
-    if(Number.isFinite(v)){ sum += v; cnt += 1; return sum / cnt; }
+    if(Number.isFinite(v)){ sum += v; cnt++; return sum / cnt; }
     return null;
   });
 
-  // Table
-  for(let i=0;i<rows.length;i++){
+  // Render ONLY last 5 rows
+  const start = Math.max(0, rows.length - 5);
+  for(let i=start;i<rows.length;i++){
     const v = values[i];
     const ra = runAvg[i];
     const prevV = i>0 ? values[i-1] : null;
@@ -485,7 +499,6 @@ function drawIntraday(){
     els.intradayTbody.appendChild(tr);
   }
 
-  // Chart
   if(chartsAvailable()){
     const ctx = document.getElementById("intradayChart");
     if(intradayChart) intradayChart.destroy();
@@ -502,6 +515,45 @@ function drawIntraday(){
       options: { responsive:true, maintainAspectRatio:false }
     });
   }
+}
+
+// ===== Live status from capture log =====
+async function loadLiveStatus(){
+  const y = els.yearSelect.value;
+  const m = els.monthSelect.value;
+  const url = `data/${y}/${y}-${m}-capturelog.csv`;
+
+  els.liveBox.innerHTML = `<div style="color:var(--muted)">Loading capture log…</div>`;
+  const text = await fetchText(url);
+
+  if(!text){
+    els.liveBox.innerHTML = `<div><b>Status:</b> capture log not found for ${y}-${m}</div>`;
+    return;
+  }
+
+  const rows = parseCsv(text);
+  if(rows.length < 2){
+    els.liveBox.innerHTML = `<div><b>Status:</b> capture log is empty.</div>`;
+    return;
+  }
+
+  const header = rows[0].map(h => String(h).trim());
+  const last = rows[rows.length - 1];
+  const idx = (name) => header.indexOf(name);
+
+  const capturedAt = last[idx("capturedAtUtc")] ?? "";
+  const publishTime = last[idx("publishTime")] ?? "";
+  const middle = last[idx("middle")] ?? "";
+  const prev = rows.length >= 3 ? rows[rows.length - 2] : null;
+  const prevPublish = prev ? (prev[idx("publishTime")] ?? "") : "";
+  const changed = (publishTime && prevPublish && publishTime !== prevPublish);
+
+  els.liveBox.innerHTML = `
+    <div><b>Last Capture (UTC):</b> ${esc(capturedAt)}</div>
+    <div><b>Last Publish Time:</b> ${esc(publishTime)}</div>
+    <div><b>Last Middle:</b> ${esc(middle)}</div>
+    <div><b>Publish Changed vs Previous Capture:</b> ${changed ? "<b>YES</b>" : "No"}</div>
+  `;
 }
 
 // ===== Downloads =====
@@ -546,51 +598,32 @@ els.btnEmail.addEventListener("click", ()=> {
   const m = els.monthSelect.value;
   const link = location.href;
   const subj = encodeURIComponent(`BOC USD/CNY Dashboard – ${y}-${m}`);
-  const body = encodeURIComponent(`Dashboard: ${link}\n\nMonth: ${y}-${m}\n\nUse Export Excel / Capture Log to download.`);
+  const body = encodeURIComponent(
+    `Dashboard: ${link}\n\n`+
+    `USD Exposure: ${els.usdExposure.value}\n`+
+    `Baseline Rate: ${els.baselineRate.value}\n`+
+    `Alert Threshold (M): ${els.alertThresholdM.value}\n`
+  );
   window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subj}&body=${body}`;
 });
 
-// Run Now
 els.btnRunNow.addEventListener("click", ()=>{
   alert("Run Now:\nRepo → Actions → Fetch BOC USD Snapshot → Run workflow");
 });
 
-// Bottom impact box (integer, signed)
-function renderImpact(){
-  if(yearDaily.length < 2){
-    els.impactBox.innerHTML = `<div style="color:var(--muted)">Need at least 2 days of data to compute day-to-day impact.</div>`;
-    return;
-  }
+// ===== Baseline lock =====
+els.btnLockBaseline.addEventListener("click", lockBaselineForMonth);
 
-  const exposureCny = Number(els.cnyExposure.value || 1500000000);
-  const last = yearDaily[yearDaily.length-1];
-  const prev = yearDaily[yearDaily.length-2];
+// ===== Wiring =====
+els.yearSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); drawIntraday(); });
+els.monthSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); drawIntraday(); });
 
-  const rToday = Number(last.avgMiddle ?? last.avg) / 100;
-  const rPrev  = Number(prev.avgMiddle ?? prev.avg) / 100;
-
-  const usdToday = exposureCny / rToday;
-  const usdPrev  = exposureCny / rPrev;
-  const usdImpact = usdToday - usdPrev;
-
-  els.impactBox.innerHTML = `
-    <div><b>Latest Day:</b> ${esc(last.date)} &nbsp; | &nbsp; <b>Prev Day:</b> ${esc(prev.date)}</div>
-    <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
-    <div><b>USD Required (Latest):</b> ${Math.round(usdToday).toLocaleString()}</div>
-    <div><b>USD Required (Prev):</b> ${Math.round(usdPrev).toLocaleString()}</div>
-    <div><b>USD Impact (Day-to-day):</b> ${fmtIntSigned(usdImpact)}</div>
-  `;
-}
-
-// Wiring
-els.yearSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); });
-els.monthSelect.addEventListener("change", async ()=>{ await loadMonth(); await loadLiveStatus(); });
 els.rateColumn.addEventListener("change", async ()=>{ await loadMonth(); drawIntraday(); });
-els.impactMode.addEventListener("change", ()=>{ renderRaw(); });
 
-els.btnRefresh.addEventListener("click", async ()=>{ await loadMonth(); await loadLiveStatus(); });
-els.btnRecalcImpact.addEventListener("click", ()=>{ renderRaw(); renderImpact(); });
+els.usdExposure.addEventListener("input", ()=>{ renderRaw(); renderImpact(); drawPnL(); });
+els.baselineRate.addEventListener("input", ()=>{ renderRaw(); renderImpact(); drawPnL(); });
 
+els.btnRefresh.addEventListener("click", async ()=>{ await loadMonth(); await loadLiveStatus(); drawIntraday(); });
 els.btnLoadLive.addEventListener("click", loadLiveStatus);
 els.btnDrawIntraday.addEventListener("click", drawIntraday);
 
