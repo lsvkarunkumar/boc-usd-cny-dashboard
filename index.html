@@ -10,53 +10,15 @@
 </head>
 <body>
 
-  <!-- AUTH OVERLAY -->
-  <div id="authOverlay" class="authOverlay">
-    <div class="authCard">
-      <h2>Access Required</h2>
-      <p class="small">Enter your email. If not approved, request access.</p>
-
-      <label>
-        Email
-        <input id="loginEmail" placeholder="name@company.com" inputmode="email" />
-      </label>
-
-      <div class="row" style="margin-top:10px">
-        <button id="btnLogin">Login</button>
-        <button id="btnLogout" class="btnGhost" style="display:none">Logout</button>
-      </div>
-
-      <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
-
-      <h3 style="margin:0 0 8px">Request Access</h3>
-      <label>
-        Full Name
-        <input id="regName" placeholder="Full name" />
-      </label>
-      <label style="margin-top:10px">
-        Email
-        <input id="regEmail" placeholder="name@company.com" inputmode="email" />
-      </label>
-
-      <div class="row" style="margin-top:10px">
-        <button id="btnRegister">Register</button>
-        <button id="btnCopyRequest" class="btnGhost">Copy Request</button>
-      </div>
-
-      <p id="authMsg" class="small" style="margin-top:10px;color:var(--muted)"></p>
-    </div>
-  </div>
-
   <header class="topbar">
     <div class="title">
       <h1>BOC USD/CNY (As Published: RMB per 100 USD)</h1>
-      <p id="subtitle">Dashboard • Mobile-ready • Lagos time</p>
+      <p id="subtitle">Auto-capture every 5 minutes • Mobile-ready • Lagos time</p>
     </div>
 
     <div class="topActions">
-      <!-- Real button-like link -->
       <a id="bocLatestLink" class="linkBtn" target="_blank" rel="noreferrer">Open BOC Latest</a>
-      <button id="btnRefresh">Refresh Dashboard</button>
+      <button id="btnRefresh">Refresh</button>
     </div>
   </header>
 
@@ -86,11 +48,11 @@
       </div>
 
       <div class="row">
-        <button id="btnDownloadCsv">Download CSV (Raw)</button>
-        <button id="btnDownloadJson">Download JSON (Raw)</button>
-        <button id="btnDownloadXls">Download Excel (2 sheets)</button>
+        <button id="btnDownloadCsv">Export CSV</button>
+        <button id="btnDownloadJson" class="btnGhost">Export JSON</button>
+        <button id="btnDownloadXls" class="btnPrimary">Export Excel</button>
 
-        <button id="btnRunNow" class="btnWarn">Run Now (Fetch Latest)</button>
+        <button id="btnRunNow" class="btnWarn">Run Now</button>
 
         <div class="emailBox">
           <input id="emailTo" placeholder="Enter email address" inputmode="email" />
@@ -99,14 +61,15 @@
       </div>
 
       <p class="hint">
-        Automation note: BOC historical search uses captcha, so we capture official “latest published snapshot” many times per day (deduped by publish time).
+        We capture the official BOC “latest published snapshot” multiple times per day and dedupe by Publish Time.
       </p>
     </section>
 
     <section class="grid">
       <div class="card wide">
         <h2>Tab 1 — Monthly Raw Records (All Captured Publish Events)</h2>
-        <p class="hint">All snapshots captured (deduped by publishTime). Multiple rows/day possible.</p>
+        <p class="hint">USD Impact column is based on Middle rate change vs previous publish event (using exposure below).</p>
+
         <div class="tableWrap">
           <table id="rawTable">
             <thead>
@@ -118,6 +81,7 @@
                 <th>Selling</th>
                 <th>Cash Selling</th>
                 <th>Middle</th>
+                <th>USD Impact</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -167,17 +131,18 @@
         <h2>USD Impact (based on CNY exposure)</h2>
         <div class="row">
           <label>
-            CNY Exposure
+            CNY Exposure (default 1.5B)
             <input id="cnyExposure" type="number" value="1500000000" min="0" step="1000000">
           </label>
           <button id="btnRecalcImpact">Recalculate</button>
         </div>
+
         <div id="impactBox" class="impactBox"></div>
       </div>
     </section>
   </main>
 
-  <!-- Chart.js (if blocked by office, charts will auto-disable gracefully in app.js) -->
+  <!-- If your office blocks CDN, charts will auto-disable gracefully -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <script src="app.js"></script>
