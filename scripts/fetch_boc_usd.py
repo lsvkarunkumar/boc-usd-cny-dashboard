@@ -16,8 +16,7 @@ TIMEOUT = 30
 DATA_DIR = "data"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
@@ -28,15 +27,7 @@ def normalize_spaces(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
 def try_parse_pub_time(pub_time_raw: str) -> Tuple[str, str]:
-    """
-    Accepts multiple formats:
-    - YYYY/MM/DD HH:MM:SS
-    - YYYY-MM-DD HH:MM:SS
-    Returns (date_iso, dt_iso).
-    """
-    s = normalize_spaces(pub_time_raw)
-    s = s.replace("\u00a0", " ")  # non-breaking space
-    # Common variants
+    s = normalize_spaces(pub_time_raw).replace("\u00a0", " ")
     fmts = [
         "%Y/%m/%d %H:%M:%S",
         "%Y-%m-%d %H:%M:%S",
@@ -66,60 +57,26 @@ def fetch_html_with_retries(url: str, retries: int = 3, sleep_s: int = 2) -> str
     raise RuntimeError(f"Failed to fetch after {retries} attempts: {last_err}")
 
 def find_usd_row(soup: BeautifulSoup) -> List[str]:
-    """
-    Searches all tables and returns the USD row as list of cell texts.
-    Expect row like:
-    USD | Buying | Cash Buying | Selling | Cash Selling | Middle | Pub Time
-    """
     tables = soup.find_all("table")
-    print(f"[INFO] Found {len(tables)} tables on page.")
     if not tables:
         raise RuntimeError("No tables found on BOC page.")
 
-    # Try to find a row where first cell == USD (case-insensitive)
-    for ti, table in enumerate(tables, start=1):
-        rows = table.find_all("tr")
-        for ri, tr in enumerate(rows, start=1):
+    for table in tables:
+        for tr in table.find_all("tr"):
             tds = tr.find_all("td")
             if not tds:
                 continue
             first = normalize_spaces(tds[0].get_text())
             if first.upper() == "USD":
-                cols = [normalize_spaces(td.get_text()) for td in tds]
-                print(f"[INFO] USD row found in table {ti}, row {ri}: {cols}")
-                return cols
-
-    # Fallback: sometimes currency might be shown as "U.S. Dollar" in some versions
-    for ti, table in enumerate(tables, start=1):
-        rows = table.find_all("tr")
-        for ri, tr in enumerate(rows, start=1):
-            tds = tr.find_all("td")
-            if not tds:
-                continue
-            first = normalize_spaces(tds[0].get_text()).lower()
-            if "usd" == first or "u.s." in first or "dollar" in first:
-                cols = [normalize_spaces(td.get_text()) for td in tds]
-                # ensure USD appears somewhere
-                if cols and (cols[0].upper() == "USD" or "USD" in cols[0].upper()):
-                    print(f"[INFO] USD-like row found in table {ti}, row {ri}: {cols}")
-                    return cols
+                return [normalize_spaces(td.get_text()) for td in tds]
 
     raise RuntimeError("USD row not found in any table.")
 
 def fetch_usd_record() -> Dict[str, str]:
     html = fetch_html_with_retries(BOC_URL, retries=3, sleep_s=2)
     soup = BeautifulSoup(html, "html.parser")
-
     cols = find_usd_row(soup)
 
-    # Guard: some pages add extra columns; we pick by position based on expected layout
-    # 0 Currency
-    # 1 Buying
-    # 2 CashBuying
-    # 3 Selling
-    # 4 CashSelling
-    # 5 Middle
-    # 6 PubTime
     def safe(i: int) -> str:
         return cols[i] if i < len(cols) else ""
 
@@ -129,20 +86,16 @@ def fetch_usd_record() -> Dict[str, str]:
     selling = safe(3)
     cash_selling = safe(4)
     middle = safe(5)
-    pub_time_raw = safe(6)
+    pub_time_raw = safe(6) or (cols[-1] if cols else "")
 
     if currency != "USD":
         raise RuntimeError(f"Row currency mismatch. Got: {currency}")
-
-    if not pub_time_raw:
-        # some layouts might place Pub Time elsewhere; try last column
-        pub_time_raw = cols[-1] if cols else ""
     if not pub_time_raw:
         raise RuntimeError("Pub Time missing in USD row.")
 
     date_iso, pub_time_iso = try_parse_pub_time(pub_time_raw)
 
-    record = {
+    return {
         "date": date_iso,
         "publishTime": pub_time_iso,
         "publishTimeRaw": pub_time_raw,
@@ -155,16 +108,14 @@ def fetch_usd_record() -> Dict[str, str]:
         "source": BOC_URL,
         "capturedAtUtc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    print(f"[INFO] Parsed record: {record}")
-    return record
 
-def month_paths(date_iso: str) -> Tuple[str, str, str, str]:
+def month_paths(date_iso: str) -> Tuple[str, str, str, str, str]:
     yyyy = date_iso[:4]
     mm = date_iso[5:7]
     folder = os.path.join(DATA_DIR, yyyy)
     ensure_dir(folder)
     base = os.path.join(folder, f"{yyyy}-{mm}")
-    return folder, base + ".json", base + ".csv", base + ".xlsx"
+    return folder, base + ".json", base + ".csv", base + ".xlsx", base + "-capturelog.csv"
 
 def load_json(path: str) -> List[Dict[str, str]]:
     if not os.path.exists(path):
@@ -188,6 +139,26 @@ def save_csv(path: str, data: List[Dict[str, str]]) -> None:
         for r in data:
             w.writerow({k: r.get(k, "") for k in fieldnames})
 
+def append_capture_log(path: str, rec: Dict[str, str]) -> None:
+    # Logs every run (even if publishTime unchanged)
+    header = ["capturedAtUtc","publishTime","publishTimeRaw","buying","cashBuying","selling","cashSelling","middle","source"]
+    file_exists = os.path.exists(path)
+    with open(path, "a", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        if not file_exists:
+            w.writerow(header)
+        w.writerow([
+            rec.get("capturedAtUtc",""),
+            rec.get("publishTime",""),
+            rec.get("publishTimeRaw",""),
+            rec.get("buying",""),
+            rec.get("cashBuying",""),
+            rec.get("selling",""),
+            rec.get("cashSelling",""),
+            rec.get("middle",""),
+            rec.get("source",""),
+        ])
+
 def autosize(ws) -> None:
     for col in ws.columns:
         max_len = 0
@@ -209,10 +180,10 @@ def build_daily_tables(all_rows: List[Dict[str, str]]):
         by_date.setdefault(r["date"], []).append(r)
     dates = sorted(by_date.keys())
 
-    avg_header = ["date","publishes","avgBuying","avgCashBuying","avgSelling","avgCashSelling","avgMiddle","minMiddle","maxMiddle"]
+    avg_header = ["date","publishes","avgMiddle","minMiddle","maxMiddle"]
     avg_rows = [avg_header]
 
-    first_header = ["date","firstPublishTime","buying","cashBuying","selling","cashSelling","middle","publishTimeRaw"]
+    first_header = ["date","firstPublishTime","middle","publishTimeRaw"]
     first_rows = [first_header]
 
     for d in dates:
@@ -220,31 +191,14 @@ def build_daily_tables(all_rows: List[Dict[str, str]]):
         publishes = len(rows)
 
         fr = rows[0]
-        first_rows.append([
-            d, fr.get("publishTime",""),
-            fr.get("buying",""), fr.get("cashBuying",""),
-            fr.get("selling",""), fr.get("cashSelling",""),
-            fr.get("middle",""), fr.get("publishTimeRaw","")
-        ])
-
-        def avg_of(key: str) -> str:
-            vals = [to_float(r.get(key,"")) for r in rows]
-            vals = [v for v in vals if v is not None]
-            if not vals:
-                return ""
-            return f"{sum(vals)/len(vals):.4f}"
+        first_rows.append([d, fr.get("publishTime",""), fr.get("middle",""), fr.get("publishTimeRaw","")])
 
         mids = [to_float(r.get("middle","")) for r in rows]
         mids = [m for m in mids if m is not None]
-
-        avg_rows.append([
-            d, str(publishes),
-            avg_of("buying"), avg_of("cashBuying"),
-            avg_of("selling"), avg_of("cashSelling"),
-            avg_of("middle"),
-            (f"{min(mids):.4f}" if mids else ""),
-            (f"{max(mids):.4f}" if mids else "")
-        ])
+        if mids:
+            avg_rows.append([d, str(publishes), f"{sum(mids)/len(mids):.4f}", f"{min(mids):.4f}", f"{max(mids):.4f}"])
+        else:
+            avg_rows.append([d, str(publishes), "", "", ""])
 
     return avg_rows, first_rows
 
@@ -268,12 +222,12 @@ def save_xlsx(path: str, all_rows: List[Dict[str, str]]) -> None:
     ws2 = wb.create_sheet("Daily Summary")
     avg_table, first_table = build_daily_tables(all_rows)
 
-    ws2.append(["Day Averages"])
+    ws2.append(["Day Averages (Middle)"])
     for row in avg_table:
         ws2.append(row)
 
     ws2.append([])
-    ws2.append(["Day First Published Values"])
+    ws2.append(["Day First Published (Middle)"])
     for row in first_table:
         ws2.append(row)
 
@@ -291,23 +245,29 @@ def dedupe_and_append(existing: List[Dict[str, str]], new_record: Dict[str, str]
 
 def main():
     rec = fetch_usd_record()
-    _, json_path, csv_path, xlsx_path = month_paths(rec["date"])
+    _, json_path, csv_path, xlsx_path, caplog_path = month_paths(rec["date"])
+
+    # Always append capture log every run
+    append_capture_log(caplog_path, rec)
+    print("[OK] Capture log appended:", caplog_path)
 
     existing = load_json(json_path)
     updated, changed = dedupe_and_append(existing, rec)
 
-    if not changed:
-        print("[INFO] No new publishTime. Nothing to update.")
-        return
-
-    save_json(json_path, updated)
-    save_csv(csv_path, updated)
-    save_xlsx(xlsx_path, updated)
-
-    print("[OK] Updated files:")
-    print(" -", json_path)
-    print(" -", csv_path)
-    print(" -", xlsx_path)
+    if changed:
+        save_json(json_path, updated)
+        save_csv(csv_path, updated)
+        save_xlsx(xlsx_path, updated)
+        print("[OK] Published series updated.")
+    else:
+        # Still write files if they don't exist yet (first run case)
+        if not os.path.exists(json_path):
+            save_json(json_path, updated)
+        if not os.path.exists(csv_path):
+            save_csv(csv_path, updated)
+        if not os.path.exists(xlsx_path):
+            save_xlsx(xlsx_path, updated)
+        print("[INFO] No new publishTime. Published series unchanged.")
 
 if __name__ == "__main__":
     main()
