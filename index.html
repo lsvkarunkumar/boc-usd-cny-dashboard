@@ -10,7 +10,7 @@
 </head>
 <body>
 
-  <!-- AUTH OVERLAY (Manual approval via data/users.json) -->
+  <!-- AUTH OVERLAY -->
   <div id="authOverlay" class="authOverlay">
     <div class="authCard">
       <h2>Access Required</h2>
@@ -54,6 +54,7 @@
     </div>
 
     <div class="topActions">
+      <!-- Real button-like link -->
       <a id="bocLatestLink" class="linkBtn" target="_blank" rel="noreferrer">Open BOC Latest</a>
       <button id="btnRefresh">Refresh Dashboard</button>
     </div>
@@ -87,19 +88,25 @@
       <div class="row">
         <button id="btnDownloadCsv">Download CSV (Raw)</button>
         <button id="btnDownloadJson">Download JSON (Raw)</button>
-        <button id="btnDownloadXlsx">Download Excel (2 sheets)</button>
+        <button id="btnDownloadXls">Download Excel (2 sheets)</button>
+
+        <button id="btnRunNow" class="btnWarn">Run Now (Fetch Latest)</button>
 
         <div class="emailBox">
           <input id="emailTo" placeholder="Enter email address" inputmode="email" />
           <button id="btnEmail">Email</button>
         </div>
       </div>
+
+      <p class="hint">
+        Automation note: BOC historical search uses captcha, so we capture official “latest published snapshot” many times per day (deduped by publish time).
+      </p>
     </section>
 
     <section class="grid">
       <div class="card wide">
-        <h2>Tab 1 — Monthly Raw Records (All Published Values)</h2>
-        <p class="hint">Shows every BOC published row for the selected month (multiple rows per day possible). Values shown exactly as stored (strings) to preserve precision.</p>
+        <h2>Tab 1 — Monthly Raw Records (All Captured Publish Events)</h2>
+        <p class="hint">All snapshots captured (deduped by publishTime). Multiple rows/day possible.</p>
         <div class="tableWrap">
           <table id="rawTable">
             <thead>
@@ -120,7 +127,6 @@
 
       <div class="card">
         <h2>Tab 2 — Daily Averages (Year)</h2>
-        <p class="hint">Daily average of the selected column + % change vs previous day.</p>
         <div class="chartWrap"><canvas id="avgChart"></canvas></div>
         <div class="tableWrap">
           <table id="avgTable">
@@ -141,7 +147,6 @@
 
       <div class="card">
         <h2>Tab 3 — Daily First Published (Year)</h2>
-        <p class="hint">Earliest publish of each day (based on publish time) + % change vs previous day.</p>
         <div class="chartWrap"><canvas id="firstChart"></canvas></div>
         <div class="tableWrap">
           <table id="firstTable">
@@ -160,7 +165,6 @@
 
       <div class="card wide">
         <h2>USD Impact (based on CNY exposure)</h2>
-        <p class="hint">Rates displayed are RMB per 100 USD (as published). USD impact uses internal /100 only for math.</p>
         <div class="row">
           <label>
             CNY Exposure
@@ -173,11 +177,8 @@
     </section>
   </main>
 
-  <!-- Chart.js -->
+  <!-- Chart.js (if blocked by office, charts will auto-disable gracefully in app.js) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- SheetJS for XLSX export -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
   <script src="app.js"></script>
   <script>
