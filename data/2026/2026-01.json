@@ -2,19 +2,19 @@
   {
     "date": "2026-01-01",
     "publishTime": "2026-01-01 00:05:00",
-    "buying": 690.10,
-    "cashBuying": 688.20,
-    "selling": 694.20,
-    "cashSelling": 696.10,
-    "middle": 692.15
+    "buying": "690.10",
+    "cashBuying": "688.20",
+    "selling": "694.20",
+    "cashSelling": "696.10",
+    "middle": "692.15"
   },
   {
     "date": "2026-01-01",
     "publishTime": "2026-01-01 10:30:00",
-    "buying": 691.00,
-    "cashBuying": 689.00,
-    "selling": 695.20,
-    "cashSelling": 697.10,
-    "middle": 693.10
+    "buying": "691.00",
+    "cashBuying": "689.00",
+    "selling": "695.20",
+    "cashSelling": "697.10",
+    "middle": "693.10"
   }
 ]
