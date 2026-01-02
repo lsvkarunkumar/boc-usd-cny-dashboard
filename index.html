@@ -45,6 +45,14 @@
             <option value="cashSelling">Cash Selling</option>
           </select>
         </label>
+
+        <label>
+          USD Impact Mode
+          <select id="impactMode">
+            <option value="prev_publish">vs Previous Publish</option>
+            <option value="prev_day_avg">vs Previous Day Average</option>
+          </select>
+        </label>
       </div>
 
       <div class="row">
@@ -61,14 +69,14 @@
       </div>
 
       <p class="hint">
-        We capture the official BOC “latest published snapshot” multiple times per day and dedupe by Publish Time.
+        Tip: “vs Previous Publish” shows intraday sensitivity; “vs Previous Day Average” shows the daily FX exposure impact.
       </p>
     </section>
 
     <section class="grid">
       <div class="card wide">
         <h2>Tab 1 — Monthly Raw Records (All Captured Publish Events)</h2>
-        <p class="hint">USD Impact column is based on Middle rate change vs previous publish event (using exposure below).</p>
+        <p class="hint">USD Impact uses Middle rate (RMB per 100 USD) and your CNY exposure.</p>
 
         <div class="tableWrap">
           <table id="rawTable">
@@ -136,15 +144,12 @@
           </label>
           <button id="btnRecalcImpact">Recalculate</button>
         </div>
-
         <div id="impactBox" class="impactBox"></div>
       </div>
     </section>
   </main>
 
-  <!-- If your office blocks CDN, charts will auto-disable gracefully -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
   <script src="app.js"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
