@@ -392,7 +392,7 @@ function renderFirst(){
 
 // ===== Impact Summary =====
 function renderImpact(){
-  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const usdExp = Number(els.usdExposure.value || 1493000000);
   const baseRate = Number(els.baselineRate.value || 714.6);
 
   const rows = [...currentData].sort((a,b)=> String(a.publishTime).localeCompare(String(b.publishTime)));
@@ -428,7 +428,7 @@ function renderImpact(){
 
 // ===== P&L Chart =====
 function drawPnL(){
-  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const usdExp = Number(els.usdExposure.value || 1493000000);
   const baseRate = Number(els.baselineRate.value || 714.6);
   if(!Number.isFinite(usdExp) || !Number.isFinite(baseRate) || baseRate<=0){
     if(pnlChart) pnlChart.destroy();
