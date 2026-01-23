@@ -242,7 +242,7 @@ function renderRaw(){
     return;
   }
 
-  const usdExp = Number(els.usdExposure.value || 1500000000);
+  const usdExp = Number(els.usdExposure.value || 1493000000);
   const baseRate = Number(els.baselineRate.value || 714.6);
   if(!Number.isFinite(usdExp) || !Number.isFinite(baseRate) || baseRate<=0){
     els.rawTbody.innerHTML = `<tr><td colspan="8">Invalid USD exposure or baseline rate.</td></tr>`;
