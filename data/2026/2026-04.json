@@ -2442,5 +2442,18 @@
     "middle": "685.82",
     "source": "https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html",
     "capturedAtUtc": "2026-04-15 15:40:19"
+  },
+  {
+    "date": "2026-04-16",
+    "publishTime": "2026-04-16 00:42:02",
+    "publishTimeRaw": "2026/04/16 00:42:02",
+    "currency": "USD",
+    "buying": "680.68",
+    "cashBuying": "680.68",
+    "selling": "683.55",
+    "cashSelling": "683.55",
+    "middle": "685.82",
+    "source": "https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html",
+    "capturedAtUtc": "2026-04-15 16:43:01"
   }
 ]
