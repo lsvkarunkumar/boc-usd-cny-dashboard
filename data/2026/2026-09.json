@@ -1,0 +1,15 @@
+[
+  {
+    "date": "2026-09-01",
+    "publishTime": "2026-09-01 02:50:03",
+    "publishTimeRaw": "2026/09/01 02:50:03",
+    "currency": "USD",
+    "buying": "671",
+    "cashBuying": "671",
+    "selling": "673.83",
+    "cashSelling": "673.83",
+    "middle": "678.28",
+    "source": "https://www.bankofchina.com/sourcedb/whpj/enindex_1619.html",
+    "capturedAtUtc": "2026-08-31 19:42:43"
+  }
+]
